@@ -6,7 +6,30 @@ import cv2
 import numpy as np
 import os
 import sys
+import platform
 from pathlib import Path
+
+
+def _get_video_capture_backend():
+    """根据操作系统获取合适的 VideoCapture 后端
+
+    Returns:
+        int: OpenCV VideoCapture 后端标识
+    """
+    system = platform.system()
+
+    if system == "Windows":
+        # Windows: 使用 DirectShow 后端
+        return cv2.CAP_DSHOW
+    elif system == "Darwin":
+        # macOS: 使用默认后端 (AVFoundation)
+        return cv2.CAP_ANY
+    elif system == "Linux":
+        # Linux: 使用 V4L2 后端
+        return cv2.CAP_V4L2
+    else:
+        # 默认使用系统原生后端
+        return cv2.CAP_ANY
 
 
 class FaceDetector:
@@ -107,8 +130,9 @@ class Camera:
 
     def open(self):
         """打开摄像头"""
-        # Windows下使用CAP_DSHOW提高兼容性
-        self.cap = cv2.VideoCapture(self.camera_index, cv2.CAP_DSHOW)
+        # 根据操作系统选择合适的后端
+        backend = _get_video_capture_backend()
+        self.cap = cv2.VideoCapture(self.camera_index, backend)
 
         if not self.cap.isOpened():
             raise RuntimeError(f"无法打开摄像头 {self.camera_index}")

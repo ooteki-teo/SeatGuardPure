@@ -43,6 +43,89 @@ from notifier import Notifier
 from autostart import AutoStartManager
 
 
+# ==================== 状态机类 ====================
+class SeatGuardStateMachine:
+    """SeatGuard 状态机"""
+
+    # 定义状态
+    class State:
+        WORK = "work"       # 工作模式
+        RELAX = "relax"     # 休息模式（久坐超时后）
+        CHECK = "check"    # 检测用户模式
+        AWAY = "away"      # 离开模式
+
+    def __init__(self, config):
+        self.config = config
+        self.current_state = self.State.WORK
+
+        # 辅助标志
+        self.user_present_in_work = False  # 工作期间是否已落座
+
+        # 时间记录
+        self.rest_start_time = 0       # 休息模式开始时间
+        self.check_user_start_time = 0  # 检测用户模式开始时间
+
+    @property
+    def state(self):
+        return self.current_state
+
+    def is_work(self):
+        return self.current_state == self.State.WORK
+
+    def is_relax(self):
+        return self.current_state == self.State.RELAX
+
+    def is_check(self):
+        return self.current_state == self.State.CHECK
+
+    def is_away(self):
+        return self.current_state == self.State.AWAY
+
+    def reset(self):
+        """重置状态机"""
+        self.current_state = self.State.WORK
+        self.user_present_in_work = False
+        self.rest_start_time = 0
+        self.check_user_start_time = 0
+
+    def check_rest_timeout(self, current_time):
+        """检查休息是否超时（倒计时作为条件判断工具）"""
+        elapsed = current_time - self.rest_start_time
+        return elapsed >= self.config.rest_countdown, elapsed
+
+    def check_check_timeout(self, current_time):
+        """检查检测用户是否超时"""
+        elapsed = current_time - self.check_user_start_time
+        return elapsed >= 3 * 60, elapsed  # 3分钟
+
+    def transition_to(self, new_state, current_time, reason=""):
+        """状态转换"""
+        old_state = self.current_state
+        if old_state == new_state:
+            return False
+
+        self.current_state = new_state
+        return old_state, new_state, reason
+
+    def on_enter_work(self, current_time, timer):
+        """进入工作模式"""
+        timer.reset()
+        timer.start()
+        self.user_present_in_work = True
+
+    def on_enter_relax(self, current_time):
+        """进入休息模式"""
+        self.rest_start_time = current_time
+
+    def on_enter_check(self, current_time):
+        """进入检测用户模式"""
+        self.check_user_start_time = current_time
+
+    def on_enter_away(self, current_time):
+        """进入离开模式"""
+        pass
+
+
 class SeatGuardApp:
     """SeatGuard 应用程序主类"""
 
@@ -65,28 +148,15 @@ class SeatGuardApp:
         # 自启管理器
         self.autostart = AutoStartManager()
 
-        # 状态变量 - 四态状态机
+        # 状态机
         self.is_monitoring = False
         self.running = False
+        self.state_machine = SeatGuardStateMachine(self.config)
+        self.State = self.state_machine.State  # 引用状态机中的状态枚举
 
-        # 四态状态:
-        # - is_work: 工作模式（正常计时）
-        # - is_relax: 休息模式（2分钟倒计时）
-        # - check_user: 检测用户状态（休息结束后检测3分钟）
-        # - is_not_here: 离开模式（连续5分钟无人，暂停提醒）
-        self.is_work = True
-        self.is_relax = False
-        self.check_user = False
-        self.is_not_here = False
-
-        # 辅助标志
-        self.user_present_in_work = False  # 工作期间是否已落座
-
-        # 时间记录
+        # 时间记录（倒计时作为条件判断工具）
         self.no_face_start_time = 0     # 连续未检测到人脸的起始时间
-        self.rest_start_time = 0       # 休息模式倒计时的起始时间
         self.last_remind_time = 0       # 控制通知频率的时间戳
-        self.check_user_start_time = 0  # 检测用户状态的起始时间
 
         # 监测线程
         self.monitor_thread = None
@@ -128,16 +198,10 @@ class SeatGuardApp:
             # 初始化计时器（默认40分钟）
             self.timer = SeatTimer(self.config.reminder_duration)
 
-            # 重置状态
-            self.is_work = True
-            self.is_relax = False
-            self.check_user = False
-            self.is_not_here = False
-            self.user_present_in_work = False
+            # 重置状态机
+            self.state_machine.reset()
             self.no_face_start_time = 0
-            self.rest_start_time = 0
             self.last_remind_time = 0
-            self.check_user_start_time = 0
             self.notifier.reset()
             self.current_faces = []
             self.timer.reset()
@@ -306,8 +370,61 @@ class SeatGuardApp:
             self.camera.release()
             self.camera = None
 
+    # ==================== 状态机辅助方法 ====================
+
+    def _check_rest_timeout(self, current_time):
+        """检查休息是否超时（倒计时作为条件判断工具）"""
+        rest_duration = self.config.rest_countdown
+        elapsed = current_time - self.rest_start_time
+        return elapsed >= rest_duration, elapsed
+
+    def _check_check_timeout(self, current_time):
+        """检查检测用户是否超时（倒计时作为条件判断工具）"""
+        check_duration = 3 * 60  # 3分钟
+        elapsed = current_time - self.check_user_start_time
+        return elapsed >= check_duration, elapsed
+
+    def _check_away_timeout(self, current_time):
+        """检查离开是否超时（倒计时作为条件判断工具）"""
+        away_duration = 5 * 60  # 5分钟
+        if self.no_face_start_time == 0:
+            return False, 0
+        elapsed = current_time - self.no_face_start_time
+        return elapsed >= away_duration, elapsed
+
+    def _transition_to(self, new_state, current_time, reason=""):
+        """状态转换"""
+        old_state = self.current_state
+        if old_state == new_state:
+            return False
+
+        self.current_state = new_state
+        self.log(f"状态转换: {old_state} → {new_state} ({reason})")
+        return True
+
+    def _on_enter_work(self, current_time):
+        """进入工作模式"""
+        self.timer.reset()
+        self.timer.start()
+        self.user_present_in_work = True
+
+    def _on_enter_relax(self, current_time):
+        """进入休息模式"""
+        self.rest_start_time = current_time
+        self.last_remind_time = 0  # 重置提醒时间
+
+    def _on_enter_check(self, current_time):
+        """进入检测用户模式"""
+        self.check_user_start_time = current_time
+
+    def _on_enter_away(self, current_time):
+        """进入离开模式"""
+        self.no_face_start_time = 0  # 重置
+
+    # ==================== 核心检测逻辑 ====================
+
     def _do_detection(self):
-        """执行一次人脸检测 - 四态状态机"""
+        """执行一次人脸检测 - 状态机控制"""
         if not self.camera or not self.camera.is_opened:
             return
 
@@ -323,137 +440,120 @@ class SeatGuardApp:
             face_detected = len(faces) > 0
             current_time = time.time()
 
-            # 动态读取配置
-            rest_duration_sec = self.config.rest_countdown  # 休息倒计时（默认120秒）
-            rest_reminder_interval = self.config.rest_reminder_interval  # 提醒间隔（默认20秒）
-            not_here_threshold = 5 * 60  # 连续5分钟检测不到人脸
-            check_user_threshold = 3 * 60  # 检测用户状态超时3分钟
+            # 获取配置
+            reminder_interval = self.config.rest_reminder_interval
+            sm = self.state_machine  # 状态机简写
 
-            # ====== 检测到人脸 ======
+            # ====== 状态机处理 ======
+            state = sm.state
+
+            # --- 检测到人脸 ---
             if face_detected:
-                # 只要检测到人脸，立即重置"离开"时间计数
-                if self.no_face_start_time != 0:
-                    self.no_face_start_time = 0
+                # 重置离开时间
+                self.no_face_start_time = 0
 
-                # 退出 is_not_here 状态，进入工作模式
-                if self.is_not_here:
-                    self.is_not_here = False
-                    self.is_work = True
-                    self.user_present_in_work = True
-                    self.timer.reset()
-                    self.timer.start()
-                    self.log("is_not_here=False | 检测到人脸，结束离开状态，重新开始工作计时")
+                if state == self.State.AWAY:
+                    # AWAY → WORK: 检测到人脸，回到工作模式
+                    result = sm.transition_to(self.State.WORK, current_time, "检测到人脸")
+                    if result:
+                        self.log(f"状态转换: {result[0]} → {result[1]} ({result[2]})")
+                    sm.on_enter_work(current_time, self.timer)
 
-                # 处理各状态下的检测到人脸情况
-                if self.is_work:
-                    # --- 工作模式 ---
-                    if not self.user_present_in_work:
-                        self.user_present_in_work = True
+                elif state == self.State.WORK:
+                    # WORK: 检测到人脸
+                    if not sm.user_present_in_work:
+                        sm.user_present_in_work = True
                         self.timer.reset()
                         self.timer.start()
-                        self.log("is_work=True | 检测到落座，开始工作倒计时")
-
-                    remaining = self.timer.get_remaining_seconds()
-                    timer_text = self.timer.format_time(remaining)
+                        self.log("检测到落座，开始工作计时")
 
                     if self.timer.is_time_up():
-                        # 到了预设提醒时间，提醒后进入休息模式
-                        if current_time - self.last_remind_time >= rest_reminder_interval:
+                        # 久坐超时，提醒后进入休息模式
+                        if current_time - self.last_remind_time >= reminder_interval:
                             self.log("久坐提醒！请适当休息！起来走走！")
                             self.notifier.notify(
                                 title="救命啊，你坐太久了吧",
                                 message=f"您已坐着超过 {self.config.reminder_duration} 分钟，请适当休息！\n\"想要活得久，喝杯水！站起来！\""
                             )
                             self.last_remind_time = current_time
-                            # 提醒后进入休息模式
-                            self.is_work = False
-                            self.is_relax = True
-                            self.rest_start_time = current_time
-                            self.log("久坐提醒后 | 进入休息模式 is_relax=True")
+                            # 状态转换: WORK → RELAX（只有久坐超时才能进入）
+                            result = sm.transition_to(self.State.RELAX, current_time, "久坐超时")
+                            if result:
+                                self.log(f"状态转换: {result[0]} → {result[1]} ({result[2]})")
+                            sm.on_enter_relax(current_time)
                     else:
-                        self.log(f"is_work=True | 工作计时中: {timer_text}")
+                        remaining = self.timer.format_time(self.timer.get_remaining_seconds())
+                        self.log(f"工作计时中: {remaining}")
 
-                elif self.is_relax:
-                    # --- 休息模式 ---
-                    # 只要在休息模式中检测到人脸，就重新开始2分钟休息时间倒计时
-                    self.rest_start_time = current_time
-                    self.log("is_relax=True | 休息中断！检测到人脸，重新开始休息倒计时")
+                elif state == self.State.RELAX:
+                    # RELAX: 休息中检测到人脸，重置倒计时
+                    sm.rest_start_time = current_time
+                    self.log("休息中断，重置倒计时")
 
-                    if current_time - self.last_remind_time >= rest_reminder_interval:
+                    if current_time - self.last_remind_time >= reminder_interval:
                         self.notifier.notify(
                             title="休息不充分",
                             message="休息时间不够，请离开座位活动一下！"
                         )
                         self.last_remind_time = current_time
 
-                elif self.check_user:
-                    # --- 检测用户状态 ---
-                    # 3分钟内检测到人脸，回到工作模式
-                    self.check_user = False
-                    self.is_work = True
-                    self.user_present_in_work = True
-                    self.timer.reset()
-                    self.timer.start()
-                    self.log("check_user=False | 检测到人脸，回到工作模式 is_work=True")
+                elif state == self.State.CHECK:
+                    # CHECK → WORK: 3分钟内检测到人脸
+                    result = sm.transition_to(self.State.WORK, current_time, "检测到人脸")
+                    if result:
+                        self.log(f"状态转换: {result[0]} → {result[1]} ({result[2]})")
+                    sm.on_enter_work(current_time, self.timer)
 
-            # ====== 未检测到人脸 ======
+            # --- 未检测到人脸 ---
             else:
-                # 记录离开开始时间（只在工作模式时记录）
-                if self.is_work and self.no_face_start_time == 0:
-                    self.no_face_start_time = current_time
+                if state == self.State.WORK:
+                    # WORK 状态下，用户离开座位时不进入 RELAX
+                    # 只记录时间，等待用户回来继续计时，或5分钟无人后进入 AWAY
+                    if self.no_face_start_time == 0:
+                        self.no_face_start_time = current_time
 
-                if self.is_work:
-                    # --- 工作模式 ---
-                    away_time = current_time - self.no_face_start_time if self.no_face_start_time > 0 else 0
+                    away_time = current_time - self.no_face_start_time
 
-                    # 连续5分钟检测不到人脸 → 进入离开模式
-                    if away_time >= not_here_threshold:
-                        self.is_not_here = True
-                        self.is_work = False
-                        self.no_face_start_time = 0  # 重置计时
-                        self.log("is_not_here=True | 工作模式下连续5分钟未检测到人脸，进入离开状态")
+                    # 连续5分钟检测不到人脸 → 进入 AWAY
+                    if away_time >= 5 * 60:
+                        result = sm.transition_to(self.State.AWAY, current_time, "5分钟无人")
+                        if result:
+                            self.log(f"状态转换: {result[0]} → {result[1]} ({result[2]})")
                     else:
-                        # 还不到5分钟，检查是否离开座位
-                        if self.user_present_in_work:
-                            # 刚离开座位，进入休息模式
-                            self.is_work = False
-                            self.is_relax = True
-                            self.rest_start_time = current_time
-                            self.no_face_start_time = 0  # 重置计时
-                            self.log("离开座位 | 进入休息模式 is_relax=True")
+                        if sm.user_present_in_work:
+                            remaining = self.timer.format_time(self.timer.get_remaining_seconds())
+                            self.log(f"暂时离开，工作计时继续: {remaining}")
                         else:
-                            self.log(f"is_work=True | 等待落座... (已离开 {int(away_time)} 秒)")
+                            self.log(f"等待落座... (已离开 {int(away_time)}秒)")
 
-                elif self.is_relax:
-                    # --- 休息模式 ---
-                    # 休息模式不检测5分钟离开，只计算倒计时
-                    rest_time = current_time - self.rest_start_time
-                    remaining_rest = rest_duration_sec - rest_time
+                elif state == self.State.RELAX:
+                    # 检查休息倒计时
+                    is_timeout, elapsed = sm.check_rest_timeout(current_time)
+                    remaining = self.config.rest_countdown - elapsed
 
-                    if remaining_rest <= 0:
-                        # 休息满2分钟，进入检测用户状态
-                        self.is_relax = False
-                        self.check_user = True
-                        self.check_user_start_time = current_time
-                        self.log("休息满2分钟 | 进入检测用户状态 check_user=True")
+                    if is_timeout:
+                        # RELAX → CHECK: 休息满2分钟
+                        result = sm.transition_to(self.State.CHECK, current_time, "2分钟倒计时结束")
+                        if result:
+                            self.log(f"状态转换: {result[0]} → {result[1]} ({result[2]})")
+                        sm.on_enter_check(current_time)
                     else:
-                        self.log(f"is_relax=True | 休息中，剩余: {int(remaining_rest)} 秒")
+                        self.log(f"休息中，剩余 {int(remaining)}秒")
 
-                elif self.check_user:
-                    # --- 检测用户状态 ---
-                    # 检测用户状态不检测5分钟离开，只计算3分钟超时
-                    check_time = current_time - self.check_user_start_time
+                elif state == self.State.CHECK:
+                    # 检查检测用户倒计时
+                    is_timeout, elapsed = sm.check_check_timeout(current_time)
+                    remaining = (3 * 60) - elapsed
 
-                    if check_time >= check_user_threshold:
-                        # 3分钟都无人，进入离开模式
-                        self.check_user = False
-                        self.is_not_here = True
-                        self.log("check_user超时3分钟 | 进入离开模式 is_not_here=True")
+                    if is_timeout:
+                        # CHECK → AWAY: 3分钟超时
+                        result = sm.transition_to(self.State.AWAY, current_time, "3分钟无人")
+                        if result:
+                            self.log(f"状态转换: {result[0]} → {result[1]} ({result[2]})")
                     else:
-                        remaining_check = check_user_threshold - check_time
-                        self.log(f"check_user=True | 检测用户中，剩余: {int(remaining_check)} 秒")
+                        self.log(f"检测用户中，剩余 {int(remaining)}秒")
 
-                # is_not_here 状态：静默挂起，不做任何处理
+                # AWAY 状态: 静默挂起，不做任何处理
 
         except Exception as e:
             self.log(f"检测异常: {e}")
@@ -565,25 +665,30 @@ class SeatGuardApp:
         """显示状态"""
         if not self.is_monitoring:
             status = "未运行"
-        elif self.is_not_here:
-            status = "离开模式 (is_not_here)"
-        elif self.check_user:
-            status = "检测用户中 (check_user)"
-        elif self.is_relax:
-            # 计算休息剩余时间
-            current_time = time.time()
-            rest_time = current_time - self.rest_start_time
-            remaining = self.config.rest_countdown - rest_time
-            if remaining < 0:
-                remaining = 0
-            status = f"休息模式 (is_relax) - 剩余: {int(remaining)}秒"
-        elif self.is_work:
-            remaining = self.timer.get_remaining_seconds()
-            seated_seconds = self.config.reminder_duration * 60 - remaining
-            seated_text = self.timer.format_time(seated_seconds)
-            status = f"工作模式 (is_work) - 已坐: {seated_text}"
         else:
-            status = "未知状态"
+            sm = self.state_machine
+            state = sm.state
+            current_time = time.time()
+
+            if state == self.State.AWAY:
+                status = "离开模式 (away)"
+            elif state == self.State.CHECK:
+                elapsed = current_time - sm.check_user_start_time
+                remaining = (3 * 60) - elapsed
+                status = f"检测用户中 - 剩余: {int(remaining)}秒"
+            elif state == self.State.RELAX:
+                elapsed = current_time - sm.rest_start_time
+                remaining = self.config.rest_countdown - elapsed
+                if remaining < 0:
+                    remaining = 0
+                status = f"休息模式 (relax) - 剩余: {int(remaining)}秒"
+            elif state == self.State.WORK:
+                remaining = self.timer.get_remaining_seconds()
+                seated_seconds = self.config.reminder_duration * 60 - remaining
+                seated_text = self.timer.format_time(seated_seconds)
+                status = f"工作模式 (work) - 已坐: {seated_text}"
+            else:
+                status = "未知状态"
 
         self.notifier.notify("SeatGuard 状态", status)
 

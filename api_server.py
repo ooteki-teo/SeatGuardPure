@@ -262,17 +262,21 @@ def create_app() -> FastAPI:
 
     @app.get("/api/reports/daily")
     async def get_daily_report():
-        """获取今日日报"""
+        """获取今日日报 JSON"""
         if _report_generator is None:
             raise HTTPException(status_code=500, detail="Report generator not initialized")
-        return {"report": _report_generator.generate_daily_report()}
+        # 返回 JSON 格式的原始数据
+        report_data = _report_generator.generate_daily_json()
+        return report_data
 
     @app.get("/api/reports/weekly")
     async def get_weekly_report():
-        """获取本周周报"""
+        """获取本周周报 JSON"""
         if _report_generator is None:
             raise HTTPException(status_code=500, detail="Report generator not initialized")
-        return {"report": _report_generator.generate_weekly_report()}
+        # 返回 JSON 格式的原始数据
+        report_data = _report_generator.generate_weekly_json()
+        return report_data
 
     return app
 

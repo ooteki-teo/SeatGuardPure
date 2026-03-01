@@ -423,9 +423,219 @@
             border-radius: 16px;
             padding: 24px;
             box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
-            white-space: pre-wrap;
-            font-size: 0.95em;
-            line-height: 1.8;
+        }
+
+        /* 报告卡片样式 */
+        .report-card {
+            background: linear-gradient(135deg, #f8f9fa 0%, #fff 100%);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid #e8ecf0;
+        }
+
+        .report-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #27ae60;
+        }
+
+        .report-icon {
+            font-size: 2em;
+        }
+
+        .report-title {
+            font-size: 1.3em;
+            font-weight: 600;
+            color: #2d3436;
+        }
+
+        .report-date {
+            color: #636e72;
+            font-size: 0.9em;
+        }
+
+        .report-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .report-stat {
+            text-align: center;
+            padding: 16px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        .report-stat-value {
+            font-size: 1.8em;
+            font-weight: 700;
+            color: #27ae60;
+        }
+
+        .report-stat-label {
+            font-size: 0.85em;
+            color: #636e72;
+            margin-top: 4px;
+        }
+
+        .report-section-title {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #2d3436;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #e8ecf0;
+        }
+
+        /* 任务进度条 */
+        .task-progress-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .task-progress-item:last-child {
+            border-bottom: none;
+        }
+
+        .task-name {
+            flex: 1;
+            font-weight: 500;
+            color: #2d3436;
+        }
+
+        .task-category {
+            font-size: 0.8em;
+            color: #636e72;
+            margin-left: 8px;
+        }
+
+        .task-bar-container {
+            width: 150px;
+            margin: 0 12px;
+        }
+
+        .task-bar {
+            height: 8px;
+            background: #e8ecf0;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .task-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #27ae60, #2ecc71);
+            border-radius: 4px;
+            transition: width 0.3s;
+        }
+
+        .task-blocks {
+            font-size: 0.9em;
+            color: #636e72;
+            min-width: 50px;
+            text-align: right;
+        }
+
+        /* 每日进度 */
+        .daily-progress {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .daily-item {
+            flex: 1;
+            min-width: 80px;
+            padding: 12px;
+            background: white;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+        }
+
+        .daily-weekday {
+            font-size: 0.85em;
+            color: #636e72;
+        }
+
+        .daily-blocks {
+            font-size: 1.4em;
+            font-weight: 600;
+            color: #27ae60;
+        }
+
+        .daily-label {
+            font-size: 0.75em;
+            color: #95a5a6;
+        }
+
+        .level-high { color: #27ae60; }
+        .level-medium { color: #f39c12; }
+        .level-low { color: #95a5a6; }
+
+        /* 分类统计 */
+        .category-item {
+            display: flex;
+            align-items: center;
+            padding: 10px 0;
+        }
+
+        .category-name {
+            width: 80px;
+            font-weight: 500;
+        }
+
+        .category-bar {
+            flex: 1;
+            height: 20px;
+            background: #e8ecf0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 0 12px;
+        }
+
+        .category-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #27ae60, #2ecc71);
+            border-radius: 10px;
+        }
+
+        .category-value {
+            min-width: 60px;
+            text-align: right;
+            font-weight: 500;
+        }
+
+        /* 健康数据 */
+        .health-stats {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .health-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: #f8f9fa;
+            border-radius: 20px;
+        }
+
+        .health-icon {
+            font-size: 1.2em;
+        }
+
+        .health-value {
+            font-weight: 600;
             color: #2d3436;
         }
 
@@ -858,13 +1068,183 @@
         // 报告
         async function loadReport(type) {
             const endpoint = type === 'daily' ? '/api/reports/daily' : '/api/reports/weekly';
+            const container = document.getElementById('reportContent');
+
             try {
-                const res = await fetch(endpoint);
-                const data = await res.json();
-                document.getElementById('reportContent').textContent = data.report || '暂无数据';
+                const data = await fetch(endpoint).then(r => r.json());
+
+                if (!data.hasData) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-icon">📊</div>
+                            <div>${data.message || '暂无数据'}</div>
+                        </div>
+                    `;
+                    return;
+                }
+
+                if (data.type === 'daily') {
+                    container.innerHTML = renderDailyReport(data);
+                } else {
+                    container.innerHTML = renderWeeklyReport(data);
+                }
             } catch (e) {
-                document.getElementById('reportContent').textContent = '加载失败';
+                container.innerHTML = '<div class="empty-state">加载失败</div>';
             }
+        }
+
+        // 渲染日报
+        function renderDailyReport(data) {
+            const s = data.summary;
+            const tasks = data.tasks || [];
+            const health = data.health;
+
+            let tasksHtml = tasks.map(task => {
+                const statusClass = task.status === '已完成' ? 'status-done' : 'status-pending';
+                return `
+                    <div class="task-progress-item">
+                        <div class="task-name">
+                            ${task.name}
+                            <span class="task-category">${task.category}</span>
+                        </div>
+                        <div class="task-bar-container">
+                            <div class="task-bar">
+                                <div class="task-bar-fill" style="width: ${task.progress}%"></div>
+                            </div>
+                        </div>
+                        <div class="task-blocks">${task.completed}/${task.total}块</div>
+                    </div>
+                `;
+            }).join('');
+
+            return `
+                <div class="report-card">
+                    <div class="report-header">
+                        <span class="report-icon">📊</span>
+                        <div>
+                            <div class="report-title">今日工作日报</div>
+                            <div class="report-date">${data.date}</div>
+                        </div>
+                    </div>
+                    <div class="report-stats-grid">
+                        <div class="report-stat">
+                            <div class="report-stat-value">${s.totalHours}h</div>
+                            <div class="report-stat-label">总工作时间</div>
+                        </div>
+                        <div class="report-stat">
+                            <div class="report-stat-value">${s.completedBlocks}</div>
+                            <div class="report-stat-label">完成块数</div>
+                        </div>
+                        <div class="report-stat">
+                            <div class="report-stat-value">${s.completionRate}%</div>
+                            <div class="report-stat-label">完成率</div>
+                        </div>
+                        <div class="report-stat">
+                            <div class="report-stat-value">${s.totalBlocks}</div>
+                            <div class="report-stat-label">总块数</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="report-card">
+                    <div class="report-section-title">📋 任务完成情况</div>
+                    ${tasksHtml || '<div style="color:#636e72;">暂无任务</div>'}
+                </div>
+
+                <div class="report-card">
+                    <div class="report-section-title">💪 健康数据</div>
+                    <div class="health-stats">
+                        <div class="health-item">
+                            <span class="health-icon">☕</span>
+                            <span>休息</span>
+                            <span class="health-value">${health.breaks}次</span>
+                        </div>
+                        <div class="health-item">
+                            <span class="health-icon">🚶</span>
+                            <span>离开</span>
+                            <span class="health-value">${health.leaves}次</span>
+                        </div>
+                        <div class="health-item">
+                            <span class="health-icon">⏰</span>
+                            <span>离开时长</span>
+                            <span class="health-value">${health.leaveMinutes}分钟</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // 渲染周报
+        function renderWeeklyReport(data) {
+            const s = data.summary;
+            const daily = data.dailyData || [];
+            const categories = data.categoryStats || [];
+
+            let dailyHtml = daily.map(day => {
+                return `
+                    <div class="daily-item">
+                        <div class="daily-weekday">${day.weekday}</div>
+                        <div class="daily-blocks level-${day.level}">${day.blocks}</div>
+                        <div class="daily-label">块</div>
+                    </div>
+                `;
+            }).join('');
+
+            let categoryHtml = categories.map(cat => {
+                return `
+                    <div class="category-item">
+                        <div class="category-name">${cat.name}</div>
+                        <div class="category-bar">
+                            <div class="category-bar-fill" style="width: ${cat.percentage}%"></div>
+                        </div>
+                        <div class="category-value">${cat.blocks}块 (${cat.percentage}%)</div>
+                    </div>
+                `;
+            }).join('');
+
+            return `
+                <div class="report-card">
+                    <div class="report-header">
+                        <span class="report-icon">📈</span>
+                        <div>
+                            <div class="report-title">本周工作周报</div>
+                            <div class="report-date">第${data.weekNumber}周 (${data.startDate} ~ ${data.endDate})</div>
+                        </div>
+                    </div>
+                    <div class="report-stats-grid">
+                        <div class="report-stat">
+                            <div class="report-stat-value">${s.totalHours}h</div>
+                            <div class="report-stat-label">总工作时间</div>
+                        </div>
+                        <div class="report-stat">
+                            <div class="report-stat-value">${s.completedBlocks}</div>
+                            <div class="report-stat-label">完成块数</div>
+                        </div>
+                        <div class="report-stat">
+                            <div class="report-stat-value">${s.completionRate}%</div>
+                            <div class="report-stat-label">完成率</div>
+                        </div>
+                        <div class="report-stat">
+                            <div class="report-stat-value">${s.totalBlocks}</div>
+                            <div class="report-stat-label">总块数</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="report-card">
+                    <div class="report-section-title">📅 每日进度</div>
+                    <div class="daily-progress">
+                        ${dailyHtml}
+                    </div>
+                </div>
+
+                ${categoryHtml ? `
+                <div class="report-card">
+                    <div class="report-section-title">📂 任务分类</div>
+                    ${categoryHtml}
+                </div>
+                ` : ''}
+            `;
         }
 
         // 回车添加任务

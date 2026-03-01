@@ -10,6 +10,8 @@
 
 > ⚠️ Note: The camera is only briefly opened during detection (default: every 20 seconds), and is closed immediately after detection.
 
+> ⚠️ Warning: This project is totaly by AI. Use it carefully.
+
 ## Introduction
 
 SeatGuard is an intelligent sedentary reminder system based on face detection. It uses the camera to detect whether the user is seated in real-time, and automatically sends reminder notifications when the user has been sitting for a configured duration, helping users develop healthy habits.

@@ -23,7 +23,9 @@
       "Bash(python -c \"import main; print\\(''OK''\\)\")",
       "Bash(python -c \":*)",
       "Bash(pip install requests --no-cache-dir)",
-      "Bash(pkill -f \"python main.py\")"
+      "Bash(pkill -f \"python main.py\")",
+      "Bash(curl -s http://127.0.0.1:8765/api/reports/daily)",
+      "Bash(python -m json.tool)"
     ]
   }
 }

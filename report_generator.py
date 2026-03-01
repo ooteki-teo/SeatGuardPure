@@ -234,3 +234,146 @@ class ReportGenerator:
     def _format_empty_weekly(self, week_number):
         """格式化空周报"""
         return f"📈 本周工作周报 (第{week_number}周)\n\n暂无任务数据"
+
+    # ===== JSON 格式报告 API =====
+
+    def generate_daily_json(self, target_date=None):
+        """生成日报 JSON 数据"""
+        if target_date is None:
+            target_date = date.today()
+
+        date_str = target_date.isoformat()
+        plan = self.data_store.get_daily_plan(date_str)
+
+        if not plan or not plan.get("tasks"):
+            return {
+                "type": "daily",
+                "date": date_str,
+                "hasData": False,
+                "message": "暂无任务数据"
+            }
+
+        tasks = plan.get("tasks", {})
+        health = plan.get("health_stats", {})
+
+        total_blocks = sum(t.get("estimated_blocks", 0) for t in tasks.values())
+        completed_blocks = sum(t.get("completed_blocks", 0) for t in tasks.values())
+        total_minutes = completed_blocks * 25
+        completion_rate = completed_blocks * 100 // max(total_blocks, 1)
+
+        task_list = []
+        for task in tasks.values():
+            task_diff = task.get("completed_blocks", 0) - task.get("estimated_blocks", 0)
+            task_list.append({
+                "id": task["id"],
+                "name": task["name"],
+                "category": task.get("category", "工作"),
+                "completed": task.get("completed_blocks", 0),
+                "total": task["estimated_blocks"],
+                "status": task["status"],
+                "progress": task.get("completed_blocks", 0) * 100 // max(task["estimated_blocks"], 1),
+                "diff": task_diff
+            })
+
+        efficiency = self._calculate_efficiency(plan)
+
+        return {
+            "type": "daily",
+            "date": date_str,
+            "hasData": True,
+            "summary": {
+                "totalHours": round(total_minutes / 60, 1),
+                "totalBlocks": total_blocks,
+                "completedBlocks": completed_blocks,
+                "completionRate": completion_rate
+            },
+            "tasks": task_list,
+            "health": {
+                "breaks": health.get("breaks", 0),
+                "leaves": health.get("leaves", 0),
+                "leaveMinutes": health.get("leave_minutes", 0)
+            },
+            "efficiency": efficiency
+        }
+
+    def generate_weekly_json(self, week_number=None, year=None):
+        """生成周报 JSON 数据"""
+        if week_number is None:
+            today = date.today()
+            week_number = today.isocalendar()[1]
+        if year is None:
+            year = date.today().year
+
+        start_date, end_date = self._get_week_range(week_number, year)
+
+        total_minutes = 0
+        total_blocks = 0
+        completed_blocks = 0
+        daily_data = []
+        category_stats = {}
+
+        weekday_map = {"Mon": "周一", "Tue": "周二", "Wed": "周三",
+                       "Thu": "周四", "Fri": "周五", "Sat": "周六", "Sun": "周日"}
+
+        for i in range(7):
+            day = start_date + timedelta(days=i)
+            date_str = day.isoformat()
+            plan = self.data_store.get_daily_plan(date_str)
+
+            day_blocks = 0
+            day_tasks = []
+
+            if plan and plan.get("tasks"):
+                tasks = plan.get("tasks", {})
+                day_blocks = sum(t.get("completed_blocks", 0) for t in tasks.values())
+                for task in tasks.values():
+                    cat = task.get("category", "其他")
+                    if cat not in category_stats:
+                        category_stats[cat] = 0
+                    category_stats[cat] += task.get("completed_blocks", 0)
+
+                    day_tasks.append({
+                        "name": task["name"],
+                        "completed": task.get("completed_blocks", 0)
+                    })
+
+            total_blocks += sum(t.get("estimated_blocks", 0) for t in plan.get("tasks", {}).values())
+            completed_blocks += day_blocks
+            total_minutes += day_blocks * 25
+
+            daily_data.append({
+                "date": date_str,
+                "weekday": weekday_map.get(day.strftime("%a"), day.strftime("%a")),
+                "blocks": day_blocks,
+                "level": "high" if day_blocks >= 6 else ("medium" if day_blocks >= 4 else "low"),
+                "tasks": day_tasks
+            })
+
+        completion_rate = completed_blocks * 100 // max(total_blocks, 1)
+
+        # 分类统计数据
+        category_list = []
+        total_cat = sum(category_stats.values())
+        for cat, blocks in category_stats.items():
+            category_list.append({
+                "name": cat,
+                "blocks": blocks,
+                "percentage": blocks * 100 // max(total_cat, 1)
+            })
+
+        return {
+            "type": "weekly",
+            "weekNumber": week_number,
+            "year": year,
+            "startDate": start_date.isoformat(),
+            "endDate": end_date.isoformat(),
+            "hasData": completed_blocks > 0,
+            "summary": {
+                "totalHours": round(total_minutes / 60, 1),
+                "totalBlocks": total_blocks,
+                "completedBlocks": completed_blocks,
+                "completionRate": completion_rate
+            },
+            "dailyData": daily_data,
+            "categoryStats": category_list
+        }

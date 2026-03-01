@@ -130,7 +130,7 @@ class SeatGuardApp:
     """SeatGuard 应用程序主类"""
 
     # 检测参数
-    DETECT_INTERVAL = 1.0          # 每秒检测一次
+    DETECT_INTERVAL = 15.0          # 每15秒检测一次
 
     def __init__(self):
         self.config = Config()
@@ -380,61 +380,56 @@ class SeatGuardApp:
         return None
 
     def _monitor_loop(self):
-        """监测主循环 - 每秒检测一次"""
+        """监测主循环 - 每DETECT_INTERVAL检测一次"""
         # 摄像头索引固定为0
         camera_index = 0
-
-        # 持续开启摄像头
-        camera_opened = False
+        camera_available = True  # 摄像头是否可用
         retry_count = 0
         max_retries = 3
 
         last_detect_time = 0  # 上次检测时间
-        sit_threshold = 3    # 坐下确认阈值（连续3次检测到人脸）
 
         while self.running:
             try:
                 current_time = time.time()
 
-                # 动态读取休息时间配置
-                grace_period = self.config.grace_period
-
-                # 确保摄像头已打开
-                if not camera_opened:
-                    try:
-                        if self.camera is None:
-                            self.camera = Camera(camera_index)
-                        if not self.camera.is_opened:
-                            self.camera.open()
-                        camera_opened = self.camera.is_opened
-                        if camera_opened:
-                            self.log("摄像头已开启")
-                    except Exception as e:
-                        self.log(f"打开摄像头失败: {e}")
-                        retry_count += 1
-                        if retry_count >= max_retries:
-                            self.log("无法连接摄像头，停止监测")
-                            break
-                        time.sleep(1)
-                        continue
-
-                # 每秒检测一次
+                # 到达检测时间
                 if current_time - last_detect_time >= self.DETECT_INTERVAL:
                     last_detect_time = current_time
-                    self._do_detection()
+
+                    # 尝试打开摄像头进行检测
+                    if camera_available:
+                        try:
+                            self.camera = Camera(camera_index)
+                            self.camera.open()
+                            if self.camera.is_opened:
+                                self.log("摄像头已开启")
+                                self._do_detection()
+                                # 检测完成后关闭摄像头
+                                self.camera.release()
+                                self.camera = None
+                                self.log("摄像头已关闭")
+                            else:
+                                raise RuntimeError("无法打开摄像头")
+                        except Exception as e:
+                            self.log(f"摄像头不可用: {e}，视为无人在座")
+                            camera_available = False
+                            retry_count += 1
+                            # 标记摄像头不可用，视为未检测到人像
+                            self._do_detection_no_camera()
+                            # 重置计数器，每隔一段时间尝试重新打开
+                            if retry_count >= max_retries:
+                                self.log(f"连续{max_retries}次摄像头不可用，暂停尝试")
+                    else:
+                        # 摄像头不可用时，视为未检测到人像
+                        self._do_detection_no_camera()
 
                 # 控制CPU占用
-                time.sleep(0.1)
+                time.sleep(0.5)
 
             except Exception as e:
                 self.log(f"监测异常: {e}")
-                camera_opened = False
-                time.sleep(0.5)
-
-        # 清理
-        if self.camera:
-            self.camera.release()
-            self.camera = None
+                time.sleep(1)
 
     # ==================== 状态机辅助方法 ====================
 
@@ -627,6 +622,65 @@ class SeatGuardApp:
 
         except Exception as e:
             self.log(f"检测异常: {e}")
+
+    def _do_detection_no_camera(self):
+        """摄像头不可用时视为未检测到人像，保持状态机逻辑正常运行"""
+        current_time = time.time()
+        sm = self.state_machine  # 状态机简写
+        state = sm.state
+
+        # 视为未检测到人脸
+        face_detected = False
+
+        # --- 未检测到人脸 ---
+        if state == self.State.WORK:
+            # WORK 状态下，用户离开座位时不进入 RELAX
+            # 只记录时间，等待用户回来继续计时，或5分钟无人后进入 AWAY
+            if self.no_face_start_time == 0:
+                self.no_face_start_time = current_time
+
+            away_time = current_time - self.no_face_start_time
+
+            # 连续5分钟检测不到人脸 → 进入 AWAY
+            if away_time >= 5 * 60:
+                result = sm.transition_to(self.State.AWAY, current_time, "5分钟无人")
+                if result:
+                    self.log(f"状态转换: {result[0]} → {result[1]} ({result[2]})")
+            else:
+                if sm.user_present_in_work:
+                    remaining = self.timer.format_time(self.timer.get_remaining_seconds())
+                    self.log(f"暂时离开(摄像头不可用)，工作计时继续: {remaining}")
+                else:
+                    self.log(f"等待落座(摄像头不可用)... (已离开 {int(away_time)}秒)")
+
+        elif state == self.State.RELAX:
+            # 检查休息倒计时
+            is_timeout, elapsed = sm.check_rest_timeout(current_time)
+            remaining = self.config.rest_countdown - elapsed
+
+            if is_timeout:
+                # RELAX → CHECK: 休息满2分钟
+                result = sm.transition_to(self.State.CHECK, current_time, "2分钟倒计时结束")
+                if result:
+                    self.log(f"状态转换: {result[0]} → {result[1]} ({result[2]})")
+                sm.on_enter_check(current_time)
+            else:
+                self.log(f"休息中(摄像头不可用)，剩余 {int(remaining)}秒")
+
+        elif state == self.State.CHECK:
+            # 检查检测用户倒计时
+            is_timeout, elapsed = sm.check_check_timeout(current_time)
+            remaining = (3 * 60) - elapsed
+
+            if is_timeout:
+                # CHECK → AWAY: 3分钟超时
+                result = sm.transition_to(self.State.AWAY, current_time, "3分钟无人")
+                if result:
+                    self.log(f"状态转换: {result[0]} → {result[1]} ({result[2]})")
+            else:
+                self.log(f"检测用户中(摄像头不可用)，剩余 {int(remaining)}秒")
+
+        # AWAY 状态: 静默挂起，不做任何处理
 
     def run(self):
         """运行应用程序（启动托盘）"""

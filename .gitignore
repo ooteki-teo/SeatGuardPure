@@ -45,3 +45,7 @@ Thumbs.db
 
 # Config (用户特定)
 .seat_guard_config.json
+
+# capture 
+capture/
+.claude/

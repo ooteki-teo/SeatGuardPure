@@ -84,7 +84,16 @@ pyinstaller SeatGuardPure.spec --clean
 2. **开始监测**：点击托盘图标 → "开始/停止监测"
 3. **查看状态**：点击托盘图标 → "查看状态"
 4. **设置自启**：点击托盘图标 → 勾选"开机自动启动"
-5. **退出程序**：点击托盘图标 → "退出"
+5. **截图功能**：点击托盘图标 → 勾选"启用截图"（默认关闭）
+6. **退出程序**：点击托盘图标 → "退出"
+
+## 截图功能
+
+启用截图功能后，会在以下时机自动保存截图：
+- **进入工作模式**：`work_start_YYYYMMDD_HHMMSS.jpg`
+- **工作结束（久坐超时）**：`work_end_YYYYMMDD_HHMMSS.jpg`
+
+截图会保存到程序目录下 `capture/` 文件夹中，图片左上角会添加时间戳水印。
 
 ## 配置说明
 
@@ -95,6 +104,7 @@ pyinstaller SeatGuardPure.spec --clean
 | reminder_duration | 40 | 提醒时长/久坐时间（分钟） |
 | rest_countdown | 120 | 休息倒计时（秒），久坐超时后进入休息模式的倒计时 |
 | rest_reminder_interval | 20 | 休息期间再次坐下提醒间隔（秒） |
+| screenshot_enabled | false | 是否启用截图功能 |
 
 ## 状态机说明
 

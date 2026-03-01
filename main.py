@@ -185,6 +185,72 @@ class SeatGuardApp:
             pass
         logging.info(message)
 
+    def _capture_screenshot(self, frame, prefix="capture"):
+        """
+        捕获截图并保存到日志目录
+
+        Args:
+            frame: 摄像头帧
+            prefix: 文件名前缀
+        """
+        # 检查截图功能是否启用
+        if not self.config.screenshot_enabled:
+            return
+
+        try:
+            import numpy as np
+            from PIL import Image, ImageDraw, ImageFont
+
+            # 获取日志目录
+            log_dir = os.path.dirname(os.path.abspath(__file__))
+            if hasattr(sys, '_MEIPASS'):
+                log_dir = os.path.dirname(sys.executable)
+
+            # 创建 capture 子目录
+            capture_dir = os.path.join(log_dir, "capture")
+            if not os.path.exists(capture_dir):
+                os.makedirs(capture_dir)
+
+            # 生成文件名
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            filename = f"{prefix}_{timestamp}.jpg"
+            filepath = os.path.join(capture_dir, filename)
+
+            # 转换帧为 PIL 图像
+            if frame is not None:
+                # OpenCV BGR 转 RGB
+                if len(frame.shape) == 3 and frame.shape[2] == 3:
+                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                else:
+                    frame_rgb = frame
+
+                img = Image.fromarray(frame_rgb)
+
+                # 添加时间戳水印
+                draw = ImageDraw.Draw(img)
+                time_text = time.strftime("%Y-%m-%d %H:%M:%S")
+
+                # 尝试使用系统字体
+                try:
+                    font = ImageFont.truetype("arial.ttf", 24)
+                except:
+                    font = ImageFont.load_default()
+
+                # 绘制半透明背景
+                bbox = draw.textbbox((0, 0), time_text, font=font)
+                text_width = bbox[2] - bbox[0]
+                text_height = bbox[3] - bbox[1]
+                draw.rectangle([10, 10, 10 + text_width + 20, 10 + text_height + 20], fill=(0, 0, 0, 128))
+
+                # 绘制文字
+                draw.text((20, 20), time_text, fill=(255, 255, 255), font=font)
+
+                # 保存图片
+                img.save(filepath, "JPEG", quality=85)
+                self.log(f"截图已保存: {filename}")
+        except Exception as e:
+            self.log(f"截图失败: {e}")
+
     def start_monitoring(self):
         """启动监测"""
         if self.is_monitoring:
@@ -466,11 +532,15 @@ class SeatGuardApp:
                         self.timer.reset()
                         self.timer.start()
                         self.log("检测到落座，开始工作计时")
+                        # 截图：进入工作模式
+                        self._capture_screenshot(frame, "work_start")
 
                     if self.timer.is_time_up():
                         # 久坐超时，提醒后进入休息模式
                         if current_time - self.last_remind_time >= reminder_interval:
                             self.log("久坐提醒！请适当休息！起来走走！")
+                            # 截图：工作结束
+                            self._capture_screenshot(frame, "work_end")
                             self.notifier.notify(
                                 title="救命啊，你坐太久了吧",
                                 message=f"您已坐着超过 {self.config.reminder_duration} 分钟，请适当休息！\n\"想要活得久，喝杯水！站起来！\""
@@ -610,6 +680,11 @@ class SeatGuardApp:
                     self._toggle_autostart,
                     checked=lambda item: self.autostart.is_enabled()
                 ),
+                pystray.MenuItem(
+                    "启用截图",
+                    self._toggle_screenshot,
+                    checked=lambda item: self.config.screenshot_enabled
+                ),
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem("查看状态", self._show_status),
                 pystray.Menu.SEPARATOR,
@@ -660,6 +735,16 @@ class SeatGuardApp:
             if self.autostart.enable():
                 self.log("已开启开机自启")
                 self.notifier.notify("设置已更改", "SeatGuard 已设置为开机自动启动。")
+
+    def _toggle_screenshot(self, icon=None, item=None):
+        """切换截图功能"""
+        self.config.screenshot_enabled = not self.config.screenshot_enabled
+        if self.config.screenshot_enabled:
+            self.log("已开启截图功能")
+            self.notifier.notify("设置已更改", "截图功能已开启。\n工作开始/结束时将自动截图。")
+        else:
+            self.log("已关闭截图功能")
+            self.notifier.notify("设置已更改", "截图功能已关闭。")
 
     def _show_status(self, icon=None, item=None):
         """显示状态"""

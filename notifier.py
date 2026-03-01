@@ -69,12 +69,18 @@ class Notifier:
                     title,
                     message,
                     duration=10,
-                    threaded=True
+                    threaded=False  # 改为非线程模式，避免后台线程异常
                 )
                 self.log("win10toast 通知发送成功")
                 return
             except Exception as e:
-                self.log(f"win10toast 失败: {e}")
+                # 静默处理 win10toast 的已知错误，避免日志刷屏
+                # win10toast 在某些 Windows 版本上会有 classAtom 错误，但通知可能已发送
+                error_str = str(e)
+                if "classAtom" in error_str or "WNDPROC" in error_str or "WPARAM" in error_str:
+                    pass  # 静默忽略已知错误
+                else:
+                    self.log(f"win10toast 失败: {e}")
 
         # 方法2: plyer
         if HAS_PLYER:

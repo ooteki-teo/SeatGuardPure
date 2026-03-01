@@ -20,6 +20,8 @@ class Config:
         'rest_countdown': 120,
         # 休息期间再次坐下提醒间隔（秒）
         'rest_reminder_interval': 20,
+        # 是否启用截图功能
+        'screenshot_enabled': False,
     }
 
     # 配置保存路径
@@ -29,15 +31,26 @@ class Config:
         self.config = self.DEFAULT_CONFIG.copy()
         self.load()
         # 确保配置有效（清理旧配置）
+        # 只在配置缺失时才添加默认值，不要覆盖已存在的值
+        needs_save = False
         if 'reminder_duration' not in self.config:
             self.config['reminder_duration'] = 40
+            needs_save = True
         if 'grace_period' not in self.config:
             self.config['grace_period'] = 120
+            needs_save = True
         if 'rest_countdown' not in self.config:
             self.config['rest_countdown'] = 120
+            needs_save = True
         if 'rest_reminder_interval' not in self.config:
             self.config['rest_reminder_interval'] = 20
-        self.save()
+            needs_save = True
+        if 'screenshot_enabled' not in self.config:
+            self.config['screenshot_enabled'] = False
+            needs_save = True
+        # 只有在有新添加的配置项时才保存
+        if needs_save:
+            self.save()
 
     def reset_to_default(self):
         """重置为默认配置"""
@@ -100,4 +113,14 @@ class Config:
     @rest_reminder_interval.setter
     def rest_reminder_interval(self, value):
         self.config['rest_reminder_interval'] = int(value)
+        self.save()
+
+    @property
+    def screenshot_enabled(self):
+        """是否启用截图功能"""
+        return bool(self.config.get('screenshot_enabled', False))
+
+    @screenshot_enabled.setter
+    def screenshot_enabled(self, value):
+        self.config['screenshot_enabled'] = bool(value)
         self.save()

@@ -6,7 +6,21 @@
       "Bash(python -c \"from data_store import DataStore; from task_manager import TaskManager; from report_generator import ReportGenerator; print\\(''All modules imported successfully!''\\)\")",
       "Bash(python -m py_compile /Users/wangdh/Software/AIagent/SeatGuardPure/main.py)",
       "Bash(ls -la /Users/wangdh/Software/AIagent/SeatGuardPure/*.py)",
-      "Bash(python -c \"from main import SeatGuardApp; print\\(''导入成功''\\)\")"
+      "Bash(python -c \"from main import SeatGuardApp; print\\(''导入成功''\\)\")",
+      "Bash(python3 -m py_compile main.py task_manager.py task_gui.py)",
+      "Bash(python3 -c \"import tkinter; print\\(''tkinter OK''\\)\")",
+      "Bash(ls -la /Users/wangdh/Software/AIagent/SeatGuardPure/.venv/bin/python*)",
+      "Bash(source /Users/wangdh/Software/AIagent/SeatGuardPure/.venv/bin/activate)",
+      "Bash(python -c \"import tkinter; print\\(''tkinter OK''\\)\")",
+      "Bash(python3 -m py_compile task_gui.py)",
+      "Bash(source .venv/bin/activate)",
+      "Bash(pip install fastapi uvicorn pydantic)",
+      "Bash(pip install fastapi uvicorn pydantic -i https://pypi.tuna.tsinghua.edu.cn/simple)",
+      "Bash(pip install fastapi uvicorn pydantic --trusted-host pypi.doubanio.com)",
+      "Bash(pip cache purge)",
+      "Bash(pip install --no-cache-dir fastapi uvicorn pydantic)",
+      "Bash(python -c \"import main; print\\(''Import OK''\\)\")",
+      "Bash(python -c \"import main; print\\(''OK''\\)\")"
     ]
   }
 }

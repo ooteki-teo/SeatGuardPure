@@ -4,3 +4,6 @@ plyer
 pystray
 Pillow
 pyinstaller
+fastapi
+uvicorn
+pydantic

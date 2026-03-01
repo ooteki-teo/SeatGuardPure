@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SeatGuard - 智能久坐提醒</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .menu-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .menu-item {
+            display: block;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            text-decoration: none;
+            color: #333;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+
+        .menu-item:hover {
+            background: #e9ecef;
+            transform: translateY(-2px);
+            border-color: #667eea;
+        }
+
+        .menu-icon {
+            font-size: 2em;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .menu-text {
+            font-weight: 600;
+            font-size: 1.1em;
+        }
+
+        .menu-desc {
+            font-size: 0.85em;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .status {
+            padding: 15px;
+            background: #e8f5e9;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+
+        .status-title {
+            font-weight: 600;
+            color: #2e7d32;
+            margin-bottom: 10px;
+        }
+
+        .status-value {
+            font-size: 1.2em;
+            color: #1b5e20;
+        }
+
+        .version {
+            margin-top: 30px;
+            color: #999;
+            font-size: 0.85em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🪑 SeatGuard</h1>
+        <p class="subtitle">智能久坐提醒系统</p>
+
+        <div class="menu-grid">
+            <a href="/tasks" class="menu-item">
+                <span class="menu-icon">📋</span>
+                <span class="menu-text">任务板</span>
+                <span class="menu-desc">管理今日任务</span>
+            </a>
+
+            <a href="/settings" class="menu-item">
+                <span class="menu-icon">⚙️</span>
+                <span class="menu-text">设置</span>
+                <span class="menu-desc">自定义配置</span>
+            </a>
+
+            <a href="/logs" class="menu-item">
+                <span class="menu-icon">📝</span>
+                <span class="menu-text">日志</span>
+                <span class="menu-desc">查看运行日志</span>
+            </a>
+
+            <a href="/reports" class="menu-item">
+                <span class="menu-icon">📊</span>
+                <span class="menu-text">报告</span>
+                <span class="menu-desc">日报与周报</span>
+            </a>
+        </div>
+
+        <div class="status">
+            <div class="status-title">今日进度</div>
+            <div class="status-value" id="summary">加载中...</div>
+        </div>
+
+        <div class="version">SeatGuard v1.0.0</div>
+    </div>
+
+    <script>
+        // 获取任务摘要
+        async function loadSummary() {
+            try {
+                const res = await fetch('/api/tasks/summary');
+                const data = await res.json();
+                document.getElementById('summary').textContent =
+                    `${data.completed_blocks || 0} / ${data.total_blocks || 0} 专注块`;
+            } catch (e) {
+                document.getElementById('summary').textContent = '加载失败';
+            }
+        }
+
+        loadSummary();
+        setInterval(loadSummary, 5000);
+    </script>
+</body>
+</html>

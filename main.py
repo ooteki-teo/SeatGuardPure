@@ -45,6 +45,8 @@ from report_generator import ReportGenerator
 from state_machine import SeatGuardStateMachine
 from screenshot import ScreenshotCapture
 from tray_icon import TrayIconFactory
+from task_gui import TaskBoardGUI
+from api_server import APIServer
 
 
 
@@ -53,7 +55,7 @@ class SeatGuardApp:
     """SeatGuard 应用程序主类"""
 
     # 检测参数
-    DETECT_INTERVAL = 2.0          # 每15秒检测一次
+    DETECT_INTERVAL = 20.0          # 每15秒检测一次
 
     def __init__(self):
         self.config = Config()
@@ -76,6 +78,18 @@ class SeatGuardApp:
 
         # 报告生成器
         self.report_generator = ReportGenerator(self.log)
+
+        # 任务 GUI 管理器 (保留用于快速添加任务通知)
+        self.task_gui = TaskBoardGUI(self.task_manager, self.notifier)
+
+        # API 服务器 (Web UI)
+        self.api_server = APIServer(
+            self.task_manager,
+            self.report_generator,
+            self.config,
+            host="127.0.0.1",
+            port=8765
+        )
 
         # 状态机
         self.is_monitoring = False
@@ -219,6 +233,8 @@ class SeatGuardApp:
                             self.camera.open()
                             if self.camera.is_opened:
                                 self.log("摄像头已开启")
+                                # 等待摄像头初始化完成（避免检测到纯黑色图像）
+                                time.sleep(2)
                                 self._do_detection()
                                 # 检测完成后关闭摄像头
                                 self.camera.release()
@@ -248,18 +264,6 @@ class SeatGuardApp:
 
     # ==================== 状态机辅助方法 ====================
 
-    def _check_rest_timeout(self, current_time):
-        """检查休息是否超时（倒计时作为条件判断工具）"""
-        rest_duration = self.config.rest_countdown
-        elapsed = current_time - self.rest_start_time
-        return elapsed >= rest_duration, elapsed
-
-    def _check_check_timeout(self, current_time):
-        """检查检测用户是否超时（倒计时作为条件判断工具）"""
-        check_duration = 3 * 60  # 3分钟
-        elapsed = current_time - self.check_user_start_time
-        return elapsed >= check_duration, elapsed
-
     def _check_away_timeout(self, current_time):
         """检查离开是否超时（倒计时作为条件判断工具）"""
         away_duration = 5 * 60  # 5分钟
@@ -268,30 +272,16 @@ class SeatGuardApp:
         elapsed = current_time - self.no_face_start_time
         return elapsed >= away_duration, elapsed
 
-    def _transition_to(self, new_state, current_time, reason=""):
-        """状态转换"""
-        old_state = self.current_state
-        if old_state == new_state:
-            return False
-
-        self.current_state = new_state
-        self.log(f"状态转换: {old_state} → {new_state} ({reason})")
-        return True
-
     def _on_enter_work(self, current_time):
         """进入工作模式"""
+        self.state_machine.user_present_in_work = True
         self.timer.reset()
         self.timer.start()
-        self.user_present_in_work = True
 
     def _on_enter_relax(self, current_time):
         """进入休息模式"""
-        self.rest_start_time = current_time
+        self.state_machine.rest_start_time = current_time
         self.last_remind_time = 0  # 重置提醒时间
-
-    def _on_enter_check(self, current_time):
-        """进入检测用户模式"""
-        self.check_user_start_time = current_time
 
     def _on_enter_away(self, current_time):
         """进入离开模式"""
@@ -334,6 +324,8 @@ class SeatGuardApp:
                     if result:
                         self.log(f"状态转换: {result[0]} → {result[1]} ({result[2]})")
                     sm.on_enter_work(current_time, self.timer)
+                    # 联动任务管理器：恢复当前任务计时
+                    self.task_manager.resume_work()
 
                 elif state == self.State.WORK:
                     # WORK: 检测到人脸
@@ -344,6 +336,19 @@ class SeatGuardApp:
                         self.log("检测到落座，开始工作计时")
                         # 截图：进入工作模式
                         self._capture_screenshot(frame, "work_start")
+                        # 联动任务管理器：恢复当前任务计时
+                        self.task_manager.resume_work()
+
+                    # 联动任务管理器：检查当前专注块是否已达标 (25分钟)
+                    completed_task_name = self.task_manager.check_and_update_timer()
+                    if completed_task_name:
+                        self.notifier.notify(
+                            title="专注块完成",
+                            message=f"太棒了！你已为「{completed_task_name}」专注了 25 分钟。"
+                        )
+                        # 如果 GUI 管理面板正打开着，刷新它
+                        if hasattr(self, 'task_gui') and self.task_gui:
+                            self.task_gui.refresh_board()
 
                     if self.timer.is_time_up():
                         # 久坐超时，提醒后进入休息模式
@@ -361,6 +366,8 @@ class SeatGuardApp:
                             if result:
                                 self.log(f"状态转换: {result[0]} → {result[1]} ({result[2]})")
                             sm.on_enter_relax(current_time)
+                            # 联动任务管理器：被迫去休息了，任务暂停
+                            self.task_manager.pause_work()
                     else:
                         remaining = self.timer.format_time(self.timer.get_remaining_seconds())
                         self.log(f"工作计时中: {remaining}")
@@ -383,6 +390,8 @@ class SeatGuardApp:
                     if result:
                         self.log(f"状态转换: {result[0]} → {result[1]} ({result[2]})")
                     sm.on_enter_work(current_time, self.timer)
+                    # 联动任务管理器：结束检查，重新投入工作
+                    self.task_manager.resume_work()
 
             # --- 未检测到人脸 ---
             else:
@@ -399,6 +408,8 @@ class SeatGuardApp:
                         result = sm.transition_to(self.State.AWAY, current_time, "5分钟无人")
                         if result:
                             self.log(f"状态转换: {result[0]} → {result[1]} ({result[2]})")
+                        # 联动任务管理器：人离开了，暂停任务
+                        self.task_manager.pause_work()
                     else:
                         if sm.user_present_in_work:
                             remaining = self.timer.format_time(self.timer.get_remaining_seconds())
@@ -501,6 +512,11 @@ class SeatGuardApp:
         """运行应用程序（启动托盘）"""
         self.log("正在启动系统托盘...")
 
+        # 启动 API 服务器
+        self.log("启动 Web API 服务器...")
+        self.api_server.start(open_browser=False)
+        self.log(f"Web 控制面板已启动: {self.api_server.get_url()}")
+
         # 先初始化托盘
         self._setup_tray()
 
@@ -508,6 +524,7 @@ class SeatGuardApp:
             self.log("SeatGuard 已启动（系统托盘模式）")
             self.log(f"提醒时长: {self.config.reminder_duration} 分钟")
             self.log(f"休息宽限期: {self.config.grace_period} 秒")
+            self.log(f"Web 控制面板: {self.api_server.get_url()}")
             self.log("点击托盘图标开始/停止监测")
 
             # 在主线程中运行托盘（会阻塞）
@@ -553,9 +570,14 @@ class SeatGuardApp:
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem("查看状态", self._show_status),
                 pystray.Menu.SEPARATOR,
-                pystray.MenuItem("📋 任务板", self._show_task_board),
-                pystray.MenuItem("📊 今日日报", self._show_daily_report),
-                pystray.MenuItem("📈 本周周报", self._show_weekly_report),
+                # Web 界面菜单
+                pystray.MenuItem("🌐 打开控制面板", self._trigger_open_main),
+                pystray.MenuItem("📋 任务板", self._trigger_open_task_board),
+                pystray.MenuItem("⚙️ 设置", self._trigger_open_settings),
+                pystray.MenuItem("📝 日志", self._trigger_open_logs),
+                pystray.Menu.SEPARATOR,
+                pystray.MenuItem("📊 今日日报", self._trigger_open_reports),
+                pystray.MenuItem("📈 本周周报", self._trigger_open_reports),
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem("退出", self._quit)
             )
@@ -614,6 +636,30 @@ class SeatGuardApp:
         else:
             self.log("已关闭截图功能")
             self.notifier.notify("设置已更改", "截图功能已关闭。")
+
+    def _trigger_quick_add_task(self, icon=None, item=None):
+        """快速添加任务 - 打开任务板页面"""
+        self.api_server.open_browser("/tasks")
+
+    def _trigger_open_task_board(self, icon=None, item=None):
+        """打开任务管理面板 - 打开网页"""
+        self.api_server.open_browser("/tasks")
+
+    def _trigger_open_settings(self, icon=None, item=None):
+        """打开设置页面"""
+        self.api_server.open_browser("/settings")
+
+    def _trigger_open_logs(self, icon=None, item=None):
+        """打开日志页面"""
+        self.api_server.open_browser("/logs")
+
+    def _trigger_open_reports(self, icon=None, item=None):
+        """打开报告页面"""
+        self.api_server.open_browser("/reports")
+
+    def _trigger_open_main(self, icon=None, item=None):
+        """打开主页"""
+        self.api_server.open_browser("/")
 
     def _show_status(self, icon=None, item=None):
         """显示状态"""

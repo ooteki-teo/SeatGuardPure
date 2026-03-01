@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>日志 - SeatGuard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: #252526;
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #3c3c3c;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header h1 {
+            font-size: 1.3em;
+            font-weight: 500;
+        }
+
+        .header a {
+            color: #4fc1ff;
+            text-decoration: none;
+            padding: 6px 12px;
+            background: #3c3c3c;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+
+        .toolbar {
+            background: #2d2d2d;
+            padding: 10px 20px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            border-bottom: 1px solid #3c3c3c;
+        }
+
+        .btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn-primary {
+            background: #0e639c;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #1177bb;
+        }
+
+        .log-container {
+            padding: 20px;
+            max-height: calc(100vh - 130px);
+            overflow-y: auto;
+        }
+
+        .log-entry {
+            padding: 4px 0;
+            font-size: 13px;
+            line-height: 1.5;
+            border-bottom: 1px solid #2a2a2a;
+        }
+
+        .log-entry:hover {
+            background: #2a2d2e;
+        }
+
+        .timestamp {
+            color: #858585;
+            margin-right: 10px;
+        }
+
+        .level-info {
+            color: #4fc1ff;
+        }
+
+        .level-warning {
+            color: #cca700;
+        }
+
+        .level-error {
+            color: #f14c4c;
+        }
+
+        .level-debug {
+            color: #b3b3b3;
+        }
+
+        .log-content {
+            color: #d4d4d4;
+        }
+
+        .auto-scroll {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #0e639c;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+
+        .log-count {
+            color: #858585;
+            font-size: 0.85em;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📝 运行日志</h1>
+        <a href="/">← 返回首页</a>
+    </div>
+
+    <div class="toolbar">
+        <button class="btn btn-primary" onclick="refreshLogs()">🔄 刷新</button>
+        <button class="btn btn-primary" onclick="clearLogs()">🗑️ 清空</button>
+        <span class="log-count" id="logCount">共 0 条</span>
+        <label style="margin-left: auto; display: flex; align-items: center; gap: 5px; cursor: pointer;">
+            <input type="checkbox" id="autoScroll" checked />
+            自动滚动
+        </label>
+    </div>
+
+    <div class="log-container" id="logContainer">
+        <div class="log-entry">加载日志中...</div>
+    </div>
+
+    <div class="auto-scroll" id="autoScrollBtn" onclick="toggleAutoScroll()">
+        ↓ 自动滚动
+    </div>
+
+    <script>
+        let autoScroll = true;
+        let logInterval = null;
+
+        function parseLogLine(line) {
+            // 解析日志格式: 2024-01-15 14:30:00,000 - INFO - message
+            const match = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d+ - (\w+) - (.+)$/);
+            if (match) {
+                return {
+                    timestamp: match[1],
+                    level: match[2],
+                    message: match[3]
+                };
+            }
+            return { timestamp: '', level: 'INFO', message: line };
+        }
+
+        function getLevelClass(level) {
+            const l = level.toUpperCase();
+            if (l === 'ERROR' || l === 'CRITICAL') return 'level-error';
+            if (l === 'WARNING') return 'level-warning';
+            if (l === 'DEBUG') return 'level-debug';
+            return 'level-info';
+        }
+
+        async function refreshLogs() {
+            try {
+                const res = await fetch('/api/logs?lines=200');
+                const data = await res.json();
+                const logs = data.logs || [];
+
+                const container = document.getElementById('logContainer');
+                document.getElementById('logCount').textContent = `共 ${logs.length} 条`;
+
+                if (logs.length === 0) {
+                    container.innerHTML = '<div class="log-entry">暂无日志</div>';
+                    return;
+                }
+
+                container.innerHTML = logs.map(line => {
+                    const parsed = parseLogLine(line);
+                    return `
+                        <div class="log-entry">
+                            <span class="timestamp">${parsed.timestamp}</span>
+                            <span class="${getLevelClass(parsed.level)}">[${parsed.level}]</span>
+                            <span class="log-content">${parsed.message}</span>
+                        </div>
+                    `;
+                }).join('');
+
+                if (autoScroll) {
+                    container.scrollTop = container.scrollHeight;
+                }
+            } catch (e) {
+                console.error('加载日志失败:', e);
+            }
+        }
+
+        function clearLogs() {
+            // 只清除前端显示
+            document.getElementById('logContainer').innerHTML = '<div class="log-entry">日志已清空</div>';
+        }
+
+        function toggleAutoScroll() {
+            autoScroll = !autoScroll;
+            const btn = document.getElementById('autoScrollBtn');
+            btn.textContent = autoScroll ? '↓ 自动滚动' : '⏸ 暂停滚动';
+            btn.style.background = autoScroll ? '#0e639c' : '#555';
+        }
+
+        // 自动刷新
+        refreshLogs();
+        logInterval = setInterval(refreshLogs, 3000);
+    </script>
+</body>
+</html>

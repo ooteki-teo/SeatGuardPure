@@ -1,4 +1,6 @@
-# SeatGuard - 智能久坐提醒系统
+# SeatGuard - 久坐提醒
+
+#！！这个是纯ai写的，能用，就能用而已
 
 <div align="center">
 

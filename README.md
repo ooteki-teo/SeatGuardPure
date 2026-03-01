@@ -131,19 +131,27 @@ stateDiagram-v2
         久坐超时 --> [*]: 提醒后进入RELAX
     }
 
-    WORK --> AWAY: 连续5分钟无人
+  state CHECK {
+        [*] --> 检测用户3分钟
+        检测用户3分钟 --> WORK: ✅ 检测到人脸
+    }
 
     state RELAX {
         [*] --> 休息倒计时2分钟
         休息倒计时2分钟 --> 重新开始2分钟: ⚠️ 检测到人脸
     }
 
+    state AWAY {
+        [*] --> 检测人脸
+    }
+
+    WORK --> AWAY: 连续5分钟无人
+
+    
+
     RELAX --> CHECK: 2分钟倒计时结束
 
-    state CHECK {
-        [*] --> 检测用户3分钟
-        检测用户3分钟 --> WORK: ✅ 检测到人脸
-    }
+    
 
     CHECK --> AWAY: 3分钟倒计时结束
 

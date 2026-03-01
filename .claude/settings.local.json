@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(python -m py_compile main.py)",
-      "Bash(python -m py_compile detector.py notifier.py autostart.py)"
+      "Bash(python -m py_compile detector.py notifier.py autostart.py)",
+      "Bash(python -c \"from data_store import DataStore; from task_manager import TaskManager; from report_generator import ReportGenerator; print\\(''All modules imported successfully!''\\)\")",
+      "Bash(python -m py_compile /Users/wangdh/Software/AIagent/SeatGuardPure/main.py)",
+      "Bash(ls -la /Users/wangdh/Software/AIagent/SeatGuardPure/*.py)",
+      "Bash(python -c \"from main import SeatGuardApp; print\\(''导入成功''\\)\")"
     ]
   }
 }

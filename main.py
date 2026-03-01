@@ -7,7 +7,6 @@ import sys
 import os
 import threading
 import time
-import cv2
 import logging
 
 # 添加当前目录到路径
@@ -41,96 +40,20 @@ from detector import FaceDetector, Camera
 from timer import SeatTimer
 from notifier import Notifier
 from autostart import AutoStartManager
+from task_manager import TaskManager
+from report_generator import ReportGenerator
+from state_machine import SeatGuardStateMachine
+from screenshot import ScreenshotCapture
+from tray_icon import TrayIconFactory
 
 
-# ==================== 状态机类 ====================
-class SeatGuardStateMachine:
-    """SeatGuard 状态机"""
-
-    # 定义状态
-    class State:
-        WORK = "work"       # 工作模式
-        RELAX = "relax"     # 休息模式（久坐超时后）
-        CHECK = "check"    # 检测用户模式
-        AWAY = "away"      # 离开模式
-
-    def __init__(self, config):
-        self.config = config
-        self.current_state = self.State.WORK
-
-        # 辅助标志
-        self.user_present_in_work = False  # 工作期间是否已落座
-
-        # 时间记录
-        self.rest_start_time = 0       # 休息模式开始时间
-        self.check_user_start_time = 0  # 检测用户模式开始时间
-
-    @property
-    def state(self):
-        return self.current_state
-
-    def is_work(self):
-        return self.current_state == self.State.WORK
-
-    def is_relax(self):
-        return self.current_state == self.State.RELAX
-
-    def is_check(self):
-        return self.current_state == self.State.CHECK
-
-    def is_away(self):
-        return self.current_state == self.State.AWAY
-
-    def reset(self):
-        """重置状态机"""
-        self.current_state = self.State.WORK
-        self.user_present_in_work = False
-        self.rest_start_time = 0
-        self.check_user_start_time = 0
-
-    def check_rest_timeout(self, current_time):
-        """检查休息是否超时（倒计时作为条件判断工具）"""
-        elapsed = current_time - self.rest_start_time
-        return elapsed >= self.config.rest_countdown, elapsed
-
-    def check_check_timeout(self, current_time):
-        """检查检测用户是否超时"""
-        elapsed = current_time - self.check_user_start_time
-        return elapsed >= 3 * 60, elapsed  # 3分钟
-
-    def transition_to(self, new_state, current_time, reason=""):
-        """状态转换"""
-        old_state = self.current_state
-        if old_state == new_state:
-            return False
-
-        self.current_state = new_state
-        return old_state, new_state, reason
-
-    def on_enter_work(self, current_time, timer):
-        """进入工作模式"""
-        timer.reset()
-        timer.start()
-        self.user_present_in_work = True
-
-    def on_enter_relax(self, current_time):
-        """进入休息模式"""
-        self.rest_start_time = current_time
-
-    def on_enter_check(self, current_time):
-        """进入检测用户模式"""
-        self.check_user_start_time = current_time
-
-    def on_enter_away(self, current_time):
-        """进入离开模式"""
-        pass
 
 
 class SeatGuardApp:
     """SeatGuard 应用程序主类"""
 
     # 检测参数
-    DETECT_INTERVAL = 15.0          # 每15秒检测一次
+    DETECT_INTERVAL = 2.0          # 每15秒检测一次
 
     def __init__(self):
         self.config = Config()
@@ -147,6 +70,12 @@ class SeatGuardApp:
 
         # 自启管理器
         self.autostart = AutoStartManager()
+
+        # 任务管理器
+        self.task_manager = TaskManager(self.log)
+
+        # 报告生成器
+        self.report_generator = ReportGenerator(self.log)
 
         # 状态机
         self.is_monitoring = False
@@ -186,70 +115,8 @@ class SeatGuardApp:
         logging.info(message)
 
     def _capture_screenshot(self, frame, prefix="capture"):
-        """
-        捕获截图并保存到日志目录
-
-        Args:
-            frame: 摄像头帧
-            prefix: 文件名前缀
-        """
-        # 检查截图功能是否启用
-        if not self.config.screenshot_enabled:
-            return
-
-        try:
-            import numpy as np
-            from PIL import Image, ImageDraw, ImageFont
-
-            # 获取日志目录
-            log_dir = os.path.dirname(os.path.abspath(__file__))
-            if hasattr(sys, '_MEIPASS'):
-                log_dir = os.path.dirname(sys.executable)
-
-            # 创建 capture 子目录
-            capture_dir = os.path.join(log_dir, "capture")
-            if not os.path.exists(capture_dir):
-                os.makedirs(capture_dir)
-
-            # 生成文件名
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
-            filename = f"{prefix}_{timestamp}.jpg"
-            filepath = os.path.join(capture_dir, filename)
-
-            # 转换帧为 PIL 图像
-            if frame is not None:
-                # OpenCV BGR 转 RGB
-                if len(frame.shape) == 3 and frame.shape[2] == 3:
-                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                else:
-                    frame_rgb = frame
-
-                img = Image.fromarray(frame_rgb)
-
-                # 添加时间戳水印
-                draw = ImageDraw.Draw(img)
-                time_text = time.strftime("%Y-%m-%d %H:%M:%S")
-
-                # 尝试使用系统字体
-                try:
-                    font = ImageFont.truetype("arial.ttf", 24)
-                except:
-                    font = ImageFont.load_default()
-
-                # 绘制半透明背景
-                bbox = draw.textbbox((0, 0), time_text, font=font)
-                text_width = bbox[2] - bbox[0]
-                text_height = bbox[3] - bbox[1]
-                draw.rectangle([10, 10, 10 + text_width + 20, 10 + text_height + 20], fill=(0, 0, 0, 128))
-
-                # 绘制文字
-                draw.text((20, 20), time_text, fill=(255, 255, 255), font=font)
-
-                # 保存图片
-                img.save(filepath, "JPEG", quality=85)
-                self.log(f"截图已保存: {filename}")
-        except Exception as e:
-            self.log(f"截图失败: {e}")
+        """捕获截图 - 委托给 ScreenshotCapture"""
+        ScreenshotCapture.capture_screenshot(frame, self.config, self.log, prefix)
 
     def start_monitoring(self):
         """启动监测"""
@@ -320,64 +187,12 @@ class SeatGuardApp:
         return self._create_tray_icon(is_running)
 
     def _create_tray_icon(self, is_running):
-        """创建托盘图标"""
-        try:
-            from PIL import Image, ImageDraw
-
-            # 尝试加载 icon.ico 文件
-            icon_path = self._get_icon_path()
-            if icon_path and os.path.exists(icon_path):
-                img = Image.open(icon_path)
-                # 调整大小为 64x64（托盘图标标准大小）
-                img = img.resize((64, 64), Image.LANCZOS)
-                # 转换为 RGBA 模式（pystray 在 Windows 上需要 RGBA）
-                if img.mode != 'RGBA':
-                    img = img.convert('RGBA')
-                return img
-
-            # 如果没有 icon.ico，创建默认图标
-            size = 64
-            img = Image.new('RGBA', (size, size), (255, 255, 255, 0))
-            draw = ImageDraw.Draw(img)
-
-            if is_running:
-                # 绿色圆圈 - 运行中
-                draw.ellipse([8, 8, 56, 56], fill='#27AE60', outline='#1E8449', width=2)
-            else:
-                # 灰色圆圈 - 未运行
-                draw.ellipse([8, 8, 56, 56], fill='#95A5A6', outline='#7F8C8D', width=2)
-
-            # 返回 RGBA 图像
-            return img
-        except Exception as e:
-            self.log(f"创建图标失败: {e}")
-            return None
+        """创建托盘图标 - 委托给 TrayIconFactory"""
+        return TrayIconFactory.create_tray_icon(is_running, self.log)
 
     def _get_icon_path(self):
-        """获取图标路径"""
-        # 1. 当前目录
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        icon_path = os.path.join(base_dir, 'icon.ico')
-        if os.path.exists(icon_path):
-            return icon_path
-
-        # 2. 项目根目录
-        root_dir = os.path.dirname(base_dir)
-        icon_path = os.path.join(root_dir, 'icon.ico')
-        if os.path.exists(icon_path):
-            return icon_path
-
-        # 3. PyInstaller 打包后的临时目录
-        if hasattr(sys, '_MEIPASS'):
-            icon_path = os.path.join(sys._MEIPASS, 'icon.ico')
-            if os.path.exists(icon_path):
-                return icon_path
-            # 4. 打包后的根目录（resources文件夹）
-            icon_path = os.path.join(os.path.dirname(sys._MEIPASS), 'icon.ico')
-            if os.path.exists(icon_path):
-                return icon_path
-
-        return None
+        """获取图标路径 - 委托给 TrayIconFactory"""
+        return TrayIconFactory.get_icon_path()
 
     def _monitor_loop(self):
         """监测主循环 - 每DETECT_INTERVAL检测一次"""
@@ -708,19 +523,15 @@ class SeatGuardApp:
         """设置系统托盘"""
         try:
             import pystray
-            from PIL import Image, ImageDraw
 
             self.log("开始创建系统托盘...")
 
-            # 创建图标 - 创建一个更可靠的图标
+            # 创建图标 - 使用 TrayIconFactory
             self.log("正在创建托盘图标...")
             icon_image = self._create_tray_icon(False)
             if icon_image is None:
                 self.log("图标创建失败，使用默认图标")
-                # 创建默认图标（使用 RGBA 格式，pystray 更稳定）
-                icon_image = Image.new('RGBA', (64, 64), (255, 255, 255, 0))
-                draw = ImageDraw.Draw(icon_image)
-                draw.ellipse([8, 8, 56, 56], fill='#95A5A6', outline='#7F8C8D', width=2)
+                icon_image = TrayIconFactory.create_default_icon()
             else:
                 self.log(f"图标创建成功: {icon_image.size}, mode={icon_image.mode}")
 
@@ -741,6 +552,10 @@ class SeatGuardApp:
                 ),
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem("查看状态", self._show_status),
+                pystray.Menu.SEPARATOR,
+                pystray.MenuItem("📋 任务板", self._show_task_board),
+                pystray.MenuItem("📊 今日日报", self._show_daily_report),
+                pystray.MenuItem("📈 本周周报", self._show_weekly_report),
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem("退出", self._quit)
             )
@@ -830,6 +645,52 @@ class SeatGuardApp:
                 status = "未知状态"
 
         self.notifier.notify("SeatGuard 状态", status)
+
+    def _show_task_board(self, icon=None, item=None):
+        """显示任务板"""
+        tasks = self.task_manager.get_today_tasks()
+        summary = self.task_manager.get_today_summary()
+
+        if not tasks:
+            message = "今日暂无任务\n\n点击添加任务"
+            self.notifier.notify("📋 任务板", message)
+            return
+
+        lines = [f"今日任务 ({summary['completed_blocks']}/{summary['total_blocks']}块)"]
+        for i, task in enumerate(tasks, 1):
+            status_mark = "✅" if task["status"] == "已完成" else ("🔄" if task["status"] == "进行中" else "⏳")
+            completed = task.get("completed_blocks", 0)
+            total = task["estimated_blocks"]
+            lines.append(f"{i}. {status_mark} {task['name']} ({completed}/{total}块)")
+
+        message = "\n".join(lines[:8])  # 限制显示行数
+        self.notifier.notify("📋 任务板", message)
+
+    def _show_daily_report(self, icon=None, item=None):
+        """显示今日日报"""
+        report = self.report_generator.generate_daily_report()
+        # 将报告内容按行分割，用通知显示
+        lines = report.split("\n")
+        # 通知消息限制长度，取中间部分
+        if len(lines) > 6:
+            display_lines = lines[2:8]  # 显示中间部分
+            message = "\n".join(display_lines) + "\n..."
+        else:
+            message = report
+
+        self.notifier.notify("📊 今日日报", message)
+
+    def _show_weekly_report(self, icon=None, item=None):
+        """显示本周周报"""
+        report = self.report_generator.generate_weekly_report()
+        lines = report.split("\n")
+        if len(lines) > 6:
+            display_lines = lines[2:8]
+            message = "\n".join(display_lines) + "\n..."
+        else:
+            message = report
+
+        self.notifier.notify("📈 本周周报", message)
 
     def _quit(self, icon=None, item=None):
         """退出程序"""

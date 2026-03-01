@@ -1,6 +1,4 @@
-# SeatGuard - Smart Sedentary Reminder
-
-## this package is totaly by ai, be carefully!
+# SeatGuard - Smart Sedentary Reminder System
 
 <div align="center">
 
@@ -10,41 +8,65 @@
 
 </div>
 
-> ⚠️ Note: The camera is only briefly opened during detection (default: every 15 seconds), and is closed immediately after detection.
+> ⚠️ Note: The camera is only briefly opened during detection (default: every 20 seconds), and is closed immediately after detection.
 
 ## Introduction
 
 SeatGuard is an intelligent sedentary reminder system based on face detection. It uses the camera to detect whether the user is seated in real-time, and automatically sends reminder notifications when the user has been sitting for a configured duration, helping users develop healthy habits.
 
+Additionally, SeatGuard provides **Task Management** features based on the Pomodoro Technique (25-minute focus blocks) to help you complete work tasks more efficiently.
+
 ## Features
 
+### Core Features
 - **Face Detection**: Real-time face detection using OpenCV
-- **Low Power Design**: Camera is only briefly opened during detection (default: every 15 seconds), and closed immediately after detection
+- **Low Power Design**: Camera is only briefly opened during detection (default: every 20 seconds), and closed immediately after detection
 - **Camera Redundancy**: When camera is unavailable, automatically degrades to "no person seated" mode and continues running other functions
 - **Smart Timer**: Automatically starts timing when face is detected, resets when user leaves
-- when **Cross-Platform Notifications**:
-  - Windows: Native Toast notifications / Message boxes
-  - macOS: System Notification Center / terminal-notifier
-  - Linux: notify-send / plyer
+
+### Task Management
+- **Pomodoro Technique**: 25-minute focus blocks with automatic timing
+- **Task Board**: Visual task list with add, start, complete, delete operations
+- **Seamless Timing**: Integrated with state machine - auto start/pause when face detected/leaves
+- **Daily/Weekly Reports**: Auto-generated work statistics
+
+### Cross-Platform
 - **System Tray**: Runs in background, click tray icon to start/stop monitoring
+- **Cross-Platform Notifications**:
+  - Windows: Native Toast notifications
+  - macOS: System Notification Center
+  - Linux: notify-send / plyer
 - **Cross-Platform Auto-Start**:
   - Windows: Registry
   - macOS: launchd
   - Linux: autostart desktop file
-- **Flexible Configuration**: Reminder duration, grace period, and detection interval are all configurable
+- **Web Control Panel**: Access task board, settings, logs, reports via browser
 
 ## Project Structure
 
 ```
 seat_guard_pure/
-├── main.py           # Main program entry
-├── config.py         # Configuration module
-├── detector.py      # Face detection module
-├── timer.py         # Timer module
-├── notifier.py      # Notification module
-├── autostart.py     # Auto-start manager
-├── requirements.txt # Python dependencies
-└── resources/       # Resource folder
+├── main.py              # Main program entry
+├── config.py            # Configuration module
+├── detector.py          # Face detection module
+├── timer.py             # Timer module
+├── notifier.py          # Notification module
+├── autostart.py         # Auto-start manager
+├── task_manager.py      # Task management module
+├── data_store.py        # Data storage module
+├── report_generator.py   # Report generation module
+├── state_machine.py     # State machine module
+├── api_server.py        # FastAPI Web server
+├── screenshot.py        # Screenshot module
+├── tray_icon.py         # Tray icon
+├── web/                 # Web frontend
+│   ├── index.html       # Home/Control panel
+│   ├── tasks.html       # Task board
+│   ├── settings.html    # Settings
+│   ├── logs.html        # Logs
+│   └── reports.html     # Reports
+├── requirements.txt      # Python dependencies
+└── resources/           # Resource folder
 ```
 
 ## Requirements
@@ -74,135 +96,97 @@ pip install -r requirements.txt
 python main.py
 ```
 
-## Build EXE
+After starting:
+1. System tray icon appears
+2. Web server auto-starts at `http://127.0.0.1:8765`
+3. Click tray menu to open Web control panel
 
-```bash
-pyinstaller SeatGuardPure.spec --clean
-```
+## Web Control Panel
 
-The executable will be located in `dist/SeatGuardPure.exe`
+After starting the program, access via tray menu or directly at http://127.0.0.1:8765
+
+| Page | Function |
+|------|----------|
+| Home | Show today's progress, navigation |
+| Task Board | Add, start, complete, delete tasks |
+| Settings | Modify reminder duration, screenshot toggle |
+| Logs | Real-time running logs |
+| Reports | View daily/weekly reports |
 
 ## Usage
 
-1. **Start program**: After running, the program displays an icon in the system tray
-2. **Start monitoring**: Click tray icon → "Start/Stop Monitoring"
-3. **View status**: Click tray icon → "View Status"
-4. **Set auto-start**: Click tray icon → Check "Auto-start on boot"
-5. **Screenshot feature**: Click tray icon → Check "Enable Screenshot" (default off)
-6. **Exit program**: Click tray icon → "Exit"
+### Tray Menu
+1. **Start/Stop Monitoring**: Toggle monitoring state
+2. **Open Control Panel**: Open Web interface in browser
+3. **Task Board**: View and manage today's tasks
+4. **Settings**: Modify configuration
+5. **Logs**: View running logs
+6. **Daily/Weekly Reports**: View work statistics
+7. **Auto-start on boot**: Enable/disable auto-start
+8. **Enable Screenshot**: Toggle screenshot feature
+
+### Task Management Flow
+1. Open task board, add today's tasks (estimate focus blocks needed)
+2. Start monitoring, when face detected, select task and click "Start"
+3. System auto-timer, 25 minutes = 1 focus block
+4. State machine integration: Auto-pause when leaving, auto-resume when returning
 
 ## Screenshot Feature
 
-When enabled, screenshots are automatically saved at the following moments:
+When enabled, screenshots are automatically saved at:
 - **Enter work mode**: `work_start_YYYYMMDD_HHMMSS.jpg`
 - **Work end (sedentary timeout)**: `work_end_YYYYMMDD_HHMMSS.jpg`
 
-Screenshots are saved in the `capture/` folder under the program directory, with timestamp watermark in the top-left corner.
+Screenshots are saved in the `capture/` folder under the program directory.
 
 ## Configuration
 
-Config file is located at `~/.seat_guard_config.json`
+### Config File Locations
+- Config: `~/.seat_guard_config.json`
+- Data: `~/.seat_guard_data.json`
+
+### Config Options
 
 | Config | Default | Description |
 |--------|---------|-------------|
-| reminder_duration | 40 | Reminder duration / sedentary time (minutes) |
-| rest_countdown | 120 | Rest countdown (seconds), countdown after sedentary timeout |
-| rest_reminder_interval | 20 | Reminder interval when sitting again during rest (seconds) |
+| reminder_duration | 40 | Sedentary reminder duration (minutes) |
+| rest_countdown | 120 | Rest countdown (seconds) |
+| rest_reminder_interval | 20 | Reminder interval during rest (seconds) |
 | screenshot_enabled | false | Enable screenshot feature |
-
-> Note: Detection interval is configured in code, default value is 15 seconds (`DETECT_INTERVAL` in `main.py`).
+| grace_period | 10 | Grace period (seconds) |
 
 ## State Machine
 
-SeatGuard uses a four-state state machine design with clear and reliable state transitions:
+SeatGuard uses a four-state state machine:
 
-### State Definitions
-
-| State | Description | Notes |
-|-------|-------------|-------|
-| WORK | Work mode | Normal timing, enters RELAX after sedentary timeout |
-| RELAX | Rest mode | 2-minute countdown, resets if face detected |
-| CHECK | Check user mode | 3-minute detection after rest to see if user returns |
-| AWAY | Away mode | Paused after 5 minutes of no one |
-
-### State Transition Diagram
-
-```mermaid
-stateDiagram-v2
-    [*] --> WORK: Start/Face detected
-
-    state WORK {
-        [*] --> Timing
-        Timing --> Timeout: Sitting duration reached
-        Timeout --> [*]: Enter RELAX after notification
-    }
-
-  state CHECK {
-        [*] --> Detect for 3 minutes
-        Detect for 3 minutes --> WORK: Face detected
-    }
-
-    state RELAX {
-        [*] --> 2-minute countdown
-        2-minute countdown --> Reset: Face detected
-    }
-
-    state AWAY {
-        [*] --> Detect face
-    }
-
-    WORK --> AWAY: 5 minutes no one
-
-    RELAX --> CHECK: 2-minute countdown ends
-
-    CHECK --> AWAY: 3-minute countdown ends
-
-    AWAY --> WORK: Face detected again
-```
-
-### State Transition Logic
-
-1. **WORK (Work Mode)**
-   - Enter: Program start, face detected, face detected in CHECK
-   - Exit:
-     - Sedentary timeout → RELAX
-     - 5 minutes no one → AWAY
-
-2. **RELAX (Rest Mode)**
-   - Enter: Automatically after sedentary timeout
-   - Behavior: 2-minute countdown, resets if face detected and reminds
-   - Exit: 2-minute countdown ends → CHECK
-
-3. **CHECK (Check User Mode)**
-   - Enter: RELAX countdown ends
-   - Behavior: Detect for 3 minutes to see if user returns
-   - Exit:
-     - Face detected → WORK
-     - 3 minutes no one → AWAY
-
-4. **AWAY (Away Mode)**
-   - Enter: 5 minutes no one in WORK, 3 minutes no one in CHECK
-   - Behavior: Silent, no reminders sent
-   - Exit: Face detected → WORK
+| State | Description |
+|-------|-------------|
+| WORK | Work mode, normal timing |
+| RELAX | Rest mode, after sedentary timeout |
+| CHECK | Check user mode, detect if user returns |
+| AWAY | Away mode, 5 minutes no one |
 
 ## Tech Stack
 
 - **Python 3.11** - Programming language
-- **OpenCV (cv2)** - Face detection
-- **Pillow** - Image processing
+- **OpenCV** - Face detection
+- **FastAPI** - Web server
 - **pystray** - System tray
 - **plyer** - Cross-platform notifications
 
 ## FAQ
 
 ### Q: Tray icon not showing?
-A: Make sure to use official Python instead of Anaconda environment for packaging.
+A: Make sure to use official Python instead of Anaconda environment.
 
 ### Q: Notifications not appearing?
 A: Check if system notification permissions are enabled.
 
 ### Q: Camera cannot be opened?
-A: Ensure the camera is not occupied by other programs, or adjust camera_index in the code.
+A: Ensure camera is not occupied by other programs.
+
+### Q: Web page cannot access?
+A: Ensure port 8765 is not occupied, or change port in settings.
 
 ## License
 

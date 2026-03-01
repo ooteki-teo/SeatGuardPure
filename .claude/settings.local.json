@@ -20,7 +20,10 @@
       "Bash(pip cache purge)",
       "Bash(pip install --no-cache-dir fastapi uvicorn pydantic)",
       "Bash(python -c \"import main; print\\(''Import OK''\\)\")",
-      "Bash(python -c \"import main; print\\(''OK''\\)\")"
+      "Bash(python -c \"import main; print\\(''OK''\\)\")",
+      "Bash(python -c \":*)",
+      "Bash(pip install requests --no-cache-dir)",
+      "Bash(pkill -f \"python main.py\")"
     ]
   }
 }

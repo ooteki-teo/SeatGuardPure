@@ -69,35 +69,19 @@ def create_app() -> FastAPI:
     if os.path.exists(web_dir):
         app.mount("/static", StaticFiles(directory=web_dir), name="static")
 
-    # ===== API 路由 =====
+    # ===== 前端页面路由 (SPA - 所有路由返回 index.html) =====
 
     @app.get("/")
-    async def root():
-        """返回主页面"""
+    @app.get("/tasks")
+    @app.get("/settings")
+    @app.get("/logs")
+    @app.get("/reports")
+    async def spa():
+        """单页应用 - 所有页面路由返回 index.html"""
         index_path = os.path.join(web_dir, 'index.html')
         if os.path.exists(index_path):
             return FileResponse(index_path)
         return {"message": "SeatGuard API is running", "docs": "/docs"}
-
-    @app.get("/tasks")
-    async def tasks_page():
-        """任务板页面"""
-        return FileResponse(os.path.join(web_dir, 'tasks.html'))
-
-    @app.get("/settings")
-    async def settings_page():
-        """设置页面"""
-        return FileResponse(os.path.join(web_dir, 'settings.html'))
-
-    @app.get("/logs")
-    async def logs_page():
-        """日志页面"""
-        return FileResponse(os.path.join(web_dir, 'logs.html'))
-
-    @app.get("/reports")
-    async def reports_page():
-        """报告页面"""
-        return FileResponse(os.path.join(web_dir, 'reports.html'))
 
     # ===== 任务 API =====
 

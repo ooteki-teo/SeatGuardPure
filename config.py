@@ -16,6 +16,10 @@ class Config:
         'reminder_duration': 40,
         # 休息时间/宽限期（秒）
         'grace_period': 120,
+        # 休息倒计时（秒）- 离开后等待reset的时间
+        'rest_countdown': 120,
+        # 休息期间再次坐下提醒间隔（秒）
+        'rest_reminder_interval': 20,
     }
 
     # 配置保存路径
@@ -29,6 +33,10 @@ class Config:
             self.config['reminder_duration'] = 40
         if 'grace_period' not in self.config:
             self.config['grace_period'] = 120
+        if 'rest_countdown' not in self.config:
+            self.config['rest_countdown'] = 120
+        if 'rest_reminder_interval' not in self.config:
+            self.config['rest_reminder_interval'] = 20
         self.save()
 
     def reset_to_default(self):
@@ -72,4 +80,24 @@ class Config:
     @grace_period.setter
     def grace_period(self, value):
         self.config['grace_period'] = value
+        self.save()
+
+    @property
+    def rest_countdown(self):
+        """休息倒计时（秒）"""
+        return int(self.config.get('rest_countdown', 120))
+
+    @rest_countdown.setter
+    def rest_countdown(self, value):
+        self.config['rest_countdown'] = int(value)
+        self.save()
+
+    @property
+    def rest_reminder_interval(self):
+        """休息期间再次坐下提醒间隔（秒）"""
+        return int(self.config.get('rest_reminder_interval', 20))
+
+    @rest_reminder_interval.setter
+    def rest_reminder_interval(self, value):
+        self.config['rest_reminder_interval'] = int(value)
         self.save()

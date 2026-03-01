@@ -1,0 +1,7 @@
+opencv-python
+numpy
+plyer
+pystray
+Pillow
+win10toast
+pyinstaller

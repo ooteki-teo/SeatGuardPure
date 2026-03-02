@@ -98,7 +98,34 @@ pip install -r requirements.txt
 python main.py
 ```
 
-After starting:
+## Build Steps
+
+### Option 1: Use the build script
+
+```bash
+# Run the built-in build script
+python build.py
+```
+
+The executable will be generated at `dist/SeatGuardPure.exe`
+
+### Option 2: Manual build
+
+```bash
+# Install PyInstaller (if not installed)
+pip install pyinstaller
+
+# Build as single executable
+pyinstaller --onefile --windowed --name SeatGuardPure --add-data "resources;resources" --add-data "web;web" --icon icon.ico main.py
+```
+
+### Build Notes
+
+- `--onefile`: Bundle into a single executable file
+- `--windowed`: No console window (GUI mode)
+- Resource files (web, resources) are automatically included in the exe
+
+The built file is located in the `dist/` directory.
 1. System tray icon appears
 2. Web server auto-starts at `http://127.0.0.1:8765`
 3. Click tray menu to open Web control panel

@@ -98,6 +98,35 @@ pip install -r requirements.txt
 python main.py
 ```
 
+## 打包步骤
+
+### 方式一：直接运行打包脚本
+
+```bash
+# 使用项目自带的打包脚本
+python build.py
+```
+
+打包完成后，可执行文件位于 `dist/SeatGuardPure.exe`
+
+### 方式二：手动打包
+
+```bash
+# 安装 PyInstaller（如果未安装）
+pip install pyinstaller
+
+# 打包成单个可执行文件
+pyinstaller --onefile --windowed --name SeatGuardPure --add-data "resources;resources" --add-data "web;web" --icon icon.ico main.py
+```
+
+### 打包说明
+
+- `--onefile`: 打包成单个可执行文件
+- `--windowed`: 不显示控制台窗口（GUI 模式）
+- 资源文件（web、resources）会自动包含在 exe 中
+
+打包后的文件位于 `dist/` 目录下。
+
 程序启动后：
 1. 系统托盘显示图标
 2. Web 服务自动启动于 `http://127.0.0.1:8765`

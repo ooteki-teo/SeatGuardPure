@@ -9,6 +9,11 @@ import threading
 import time
 import logging
 
+# 【关键修复】防止 --windowed 模式下 sys.stdout 为 None 导致崩溃
+if sys.platform == 'win32' and sys.stdout is None:
+    sys.stdout = open(os.devnull, 'w')
+    sys.stderr = open(os.devnull, 'w')
+
 # 添加当前目录到路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -765,4 +770,6 @@ def main():
 
 
 if __name__ == "__main__":
+    import multiprocessing
+    multiprocessing.freeze_support()  # 防止打包后的 exe 出现进程无限嵌套重启的问题
     main()

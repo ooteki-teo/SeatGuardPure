@@ -7,6 +7,7 @@ from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
 from typing import Optional, List
 import os
+import sys
 import webbrowser
 import threading
 import uvicorn
@@ -63,6 +64,10 @@ def create_app() -> FastAPI:
 
     # 获取 web 目录的绝对路径
     current_dir = os.path.dirname(os.path.abspath(__file__))
+    # 打包后资源在 _MEIPASS 目录中
+    if hasattr(sys, '_MEIPASS'):
+        current_dir = sys._MEIPASS
+
     web_dir = os.path.join(current_dir, 'web')
 
     # 挂载静态文件目录
@@ -285,7 +290,7 @@ class APIServer:
     """API 服务器管理类"""
 
     def __init__(self, task_manager: TaskManager, report_generator: ReportGenerator,
-                 config: Config, host: str = "127.0.0.1", port: int = 8765):
+                 config: Config, host: str = "127.0.0.1", port: int = 8566):
         self.host = host
         self.port = port
         self.app = create_app()
@@ -300,13 +305,34 @@ class APIServer:
         if self.thread is not None:
             return  # 已经在运行
 
+        import logging
+        import asyncio
+        logger = logging.getLogger(__name__)
+
         def run_server():
-            uvicorn.run(
-                self.app,
-                host=self.host,
-                port=self.port,
-                log_level="warning"  # 减少日志输出
-            )
+            try:
+                # 配置 uvicorn 日志
+                uvicorn_logger = logging.getLogger("uvicorn")
+                uvicorn_logger.setLevel(logging.WARNING)
+
+                # 使用 asyncio 运行 uvicorn
+                config = uvicorn.Config(
+                    self.app,
+                    host=self.host,
+                    port=self.port,
+                    log_level="warning",
+                    access_log=False,
+                    use_colors=False,
+                    log_config=None  # 阻止 uvicorn 挂载 sys.stdout
+                )
+                server = uvicorn.Server(config)
+
+                # 获取事件循环并运行
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(server.serve())
+            except Exception as e:
+                logger.error(f"API 服务器启动失败: {e}")
 
         self.thread = threading.Thread(target=run_server, daemon=True)
         self.thread.start()

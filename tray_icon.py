@@ -15,25 +15,28 @@ class TrayIconFactory:
     @staticmethod
     def get_icon_path():
         """获取图标路径"""
-        # 1. 当前目录
+        # 1. PyInstaller 打包后的临时目录优先
+        if hasattr(sys, '_MEIPASS'):
+            icon_path = os.path.join(sys._MEIPASS, 'icon.ico')
+            if os.path.exists(icon_path):
+                return icon_path
+
+        # 2. 当前目录
         base_dir = os.path.dirname(os.path.abspath(__file__))
         icon_path = os.path.join(base_dir, 'icon.ico')
         if os.path.exists(icon_path):
             return icon_path
 
-        # 2. 项目根目录
+        # 3. 项目根目录
         root_dir = os.path.dirname(base_dir)
         icon_path = os.path.join(root_dir, 'icon.ico')
         if os.path.exists(icon_path):
             return icon_path
 
-        # 3. PyInstaller 打包后的临时目录
+        # 4. exe 所在目录（打包后 exe 旁边）
         if hasattr(sys, '_MEIPASS'):
-            icon_path = os.path.join(sys._MEIPASS, 'icon.ico')
-            if os.path.exists(icon_path):
-                return icon_path
-            # 4. 打包后的根目录（resources文件夹）
-            icon_path = os.path.join(os.path.dirname(sys._MEIPASS), 'icon.ico')
+            exe_dir = os.path.dirname(sys.executable)
+            icon_path = os.path.join(exe_dir, 'icon.ico')
             if os.path.exists(icon_path):
                 return icon_path
 

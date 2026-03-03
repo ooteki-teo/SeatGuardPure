@@ -28,6 +28,9 @@ class SeatGuardStateMachine:
         self.rest_start_time = 0       # 休息模式开始时间
         self.check_user_start_time = 0  # 检测用户模式开始时间
 
+        # 休息期间重置计数
+        self.relax_reset_count = 0  # 休息期间检测到人脸的次数
+
     @property
     def state(self):
         return self.current_state
@@ -50,6 +53,7 @@ class SeatGuardStateMachine:
         self.user_present_in_work = False
         self.rest_start_time = 0
         self.check_user_start_time = 0
+        self.relax_reset_count = 0
 
     def check_rest_timeout(self, current_time):
         """检查休息是否超时（倒计时作为条件判断工具）"""
@@ -59,7 +63,7 @@ class SeatGuardStateMachine:
     def check_check_timeout(self, current_time):
         """检查检测用户是否超时"""
         elapsed = current_time - self.check_user_start_time
-        return elapsed >= 3 * 60, elapsed  # 3分钟
+        return elapsed >= self.config.check_timeout, elapsed
 
     def transition_to(self, new_state, current_time, reason=""):
         """状态转换"""
@@ -87,3 +91,24 @@ class SeatGuardStateMachine:
     def on_enter_away(self, current_time):
         """进入离开模式"""
         pass
+
+    def try_reset_relax_countdown(self, current_time):
+        """
+        尝试重置休息倒计时
+
+        Returns:
+            tuple: (是否允许重置, 是否强制进入CHECK)
+        """
+        max_resets = self.config.max_relax_resets
+        if self.relax_reset_count >= max_resets:
+            # 达到最大重置次数，强制进入 CHECK
+            return False, True
+
+        # 增加重置计数并重置倒计时
+        self.relax_reset_count += 1
+        self.rest_start_time = current_time
+        return True, False
+
+    def get_relax_remaining_resets(self):
+        """获取剩余可重置次数"""
+        return max(0, self.config.max_relax_resets - self.relax_reset_count)

@@ -25,7 +25,8 @@
       "Bash(pip install requests --no-cache-dir)",
       "Bash(pkill -f \"python main.py\")",
       "Bash(curl -s http://127.0.0.1:8765/api/reports/daily)",
-      "Bash(python -m json.tool)"
+      "Bash(python -m json.tool)",
+      "Bash(ls -la h:/longset/seat_guard_pure/*.py)"
     ]
   }
 }

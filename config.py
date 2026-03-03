@@ -22,6 +22,14 @@ class Config:
         'rest_reminder_interval': 20,
         # 是否启用截图功能
         'screenshot_enabled': False,
+        # 检测间隔（秒）
+        'detect_interval': 20,
+        # 离开超时时间（秒）- 连续检测不到人脸多少秒后进入AWAY模式
+        'away_timeout': 300,
+        # CHECK模式超时时间（秒）
+        'check_timeout': 180,
+        # 休息期间最大重置次数
+        'max_relax_resets': 3,
     }
 
     # 配置保存路径
@@ -47,6 +55,18 @@ class Config:
             needs_save = True
         if 'screenshot_enabled' not in self.config:
             self.config['screenshot_enabled'] = False
+            needs_save = True
+        if 'detect_interval' not in self.config:
+            self.config['detect_interval'] = 20
+            needs_save = True
+        if 'away_timeout' not in self.config:
+            self.config['away_timeout'] = 300
+            needs_save = True
+        if 'check_timeout' not in self.config:
+            self.config['check_timeout'] = 180
+            needs_save = True
+        if 'max_relax_resets' not in self.config:
+            self.config['max_relax_resets'] = 3
             needs_save = True
         # 只有在有新添加的配置项时才保存
         if needs_save:
@@ -123,4 +143,44 @@ class Config:
     @screenshot_enabled.setter
     def screenshot_enabled(self, value):
         self.config['screenshot_enabled'] = bool(value)
+        self.save()
+
+    @property
+    def detect_interval(self):
+        """检测间隔（秒）"""
+        return int(self.config.get('detect_interval', 20))
+
+    @detect_interval.setter
+    def detect_interval(self, value):
+        self.config['detect_interval'] = int(value)
+        self.save()
+
+    @property
+    def away_timeout(self):
+        """离开超时时间（秒）"""
+        return int(self.config.get('away_timeout', 300))
+
+    @away_timeout.setter
+    def away_timeout(self, value):
+        self.config['away_timeout'] = int(value)
+        self.save()
+
+    @property
+    def check_timeout(self):
+        """CHECK模式超时时间（秒）"""
+        return int(self.config.get('check_timeout', 180))
+
+    @check_timeout.setter
+    def check_timeout(self, value):
+        self.config['check_timeout'] = int(value)
+        self.save()
+
+    @property
+    def max_relax_resets(self):
+        """休息期间最大重置次数"""
+        return int(self.config.get('max_relax_resets', 3))
+
+    @max_relax_resets.setter
+    def max_relax_resets(self, value):
+        self.config['max_relax_resets'] = int(value)
         self.save()

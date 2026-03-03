@@ -157,6 +157,7 @@ class SeatGuardApp:
             self.notifier.reset()
             self.current_faces = []
             self.timer.reset()
+            self.pending_screenshot = None  # 待截图标志 (prefix, frame)
 
             # 设置运行状态
             self.is_monitoring = True
@@ -194,10 +195,16 @@ class SeatGuardApp:
         """更新托盘图标状态"""
         if self.tray:
             try:
-                new_icon = self._create_tray_icon(is_running)
+                # 获取当前状态
+                state = None
+                if is_running and hasattr(self, 'state_machine'):
+                    state = self.state_machine.state
+
+                new_icon = TrayIconFactory.create_state_icon(state, is_running, self.log)
                 if new_icon:
                     self.tray.icon = new_icon
-                    self.log(f"托盘图标已更新: {'运行中' if is_running else '未运行'}")
+                    state_name = state if state else "未运行"
+                    self.log(f"托盘图标已更新: {state_name}")
             except Exception as e:
                 self.log(f"更新托盘图标失败: {e}")
 
@@ -323,12 +330,22 @@ class SeatGuardApp:
                 # 重置离开时间
                 self.no_face_start_time = 0
 
+                # 先执行待截图（如果有），确保在有人脸时拍照
+                if self.pending_screenshot:
+                    prefix, pending_frame = self.pending_screenshot
+                    self._capture_screenshot(frame, prefix)
+                    self.pending_screenshot = None
+
                 if state == self.State.AWAY:
                     # AWAY → WORK: 检测到人脸，回到工作模式
                     result = sm.transition_to(self.State.WORK, current_time, "检测到人脸")
                     if result:
                         self.log(f"状态转换: {result[0]} → {result[1]} ({result[2]})")
+                        self.notifier.notify("状态切换", "检测到人脸，已恢复工作模式")
+                        self._update_tray_icon(True)
                     sm.on_enter_work(current_time, self.timer)
+                    # 直接截图：进入工作模式（当前帧已有人脸）
+                    self._capture_screenshot(frame, "work_start")
                     # 联动任务管理器：恢复当前任务计时
                     self.task_manager.resume_work()
 
@@ -339,7 +356,7 @@ class SeatGuardApp:
                         self.timer.reset()
                         self.timer.start()
                         self.log("检测到落座，开始工作计时")
-                        # 截图：进入工作模式
+                        # 直接截图：进入工作模式（当前帧已有人脸）
                         self._capture_screenshot(frame, "work_start")
                         # 联动任务管理器：恢复当前任务计时
                         self.task_manager.resume_work()
@@ -358,18 +375,16 @@ class SeatGuardApp:
                     if self.timer.is_time_up():
                         # 久坐超时，提醒后进入休息模式
                         if current_time - self.last_remind_time >= reminder_interval:
-                            self.log("久坐提醒！请适当休息！起来走走！")
-                            # 截图：工作结束
-                            self._capture_screenshot(frame, "work_end")
-                            self.notifier.notify(
-                                title="救命啊，你坐太久了吧",
-                                message=f"您已坐着超过 {self.config.reminder_duration} 分钟，请适当休息！\n\"想要活得久，喝杯水！站起来！\""
-                            )
+                            self.log("久坐超时！请适当休息！")
+                            # 设置待截图：工作结束
+                            self.pending_screenshot = ("work_end", None)
                             self.last_remind_time = current_time
                             # 状态转换: WORK → RELAX（只有久坐超时才能进入）
                             result = sm.transition_to(self.State.RELAX, current_time, "久坐超时")
                             if result:
                                 self.log(f"状态转换: {result[0]} → {result[1]} ({result[2]})")
+                                self.notifier.notify("状态切换", "久坐超时！请休息一下吧！")
+                                self._update_tray_icon(True)
                             sm.on_enter_relax(current_time)
                             # 联动任务管理器：被迫去休息了，任务暂停
                             self.task_manager.pause_work()
@@ -378,23 +393,24 @@ class SeatGuardApp:
                         self.log(f"工作计时中: {remaining}")
 
                 elif state == self.State.RELAX:
-                    # RELAX: 休息中检测到人脸，重置倒计时
-                    sm.rest_start_time = current_time
-                    self.log("休息中断，重置倒计时")
-
+                    # RELAX: 休息中检测到人脸，说明没好好休息
+                    self.log("休息不充分！请继续休息！")
                     if current_time - self.last_remind_time >= reminder_interval:
-                        self.notifier.notify(
-                            title="休息不充分",
-                            message="休息时间不够，请离开座位活动一下！"
-                        )
+                        self.notifier.notify("状态切换", "休息不充分！请继续休息！")
                         self.last_remind_time = current_time
+                    # 重置休息倒计时
+                    sm.rest_start_time = current_time
 
                 elif state == self.State.CHECK:
                     # CHECK → WORK: 3分钟内检测到人脸
                     result = sm.transition_to(self.State.WORK, current_time, "检测到人脸")
                     if result:
                         self.log(f"状态转换: {result[0]} → {result[1]} ({result[2]})")
+                        self.notifier.notify("状态切换", "检测到人脸，已恢复工作模式")
+                        self._update_tray_icon(True)
                     sm.on_enter_work(current_time, self.timer)
+                    # 直接截图：进入工作模式（当前帧已有人脸）
+                    self._capture_screenshot(frame, "work_start")
                     # 联动任务管理器：结束检查，重新投入工作
                     self.task_manager.resume_work()
 
@@ -413,6 +429,8 @@ class SeatGuardApp:
                         result = sm.transition_to(self.State.AWAY, current_time, "5分钟无人")
                         if result:
                             self.log(f"状态转换: {result[0]} → {result[1]} ({result[2]})")
+                            self.notifier.notify("状态切换", "您已离开座位 5 分钟，进入离开模式")
+                            self._update_tray_icon(True)
                         # 联动任务管理器：人离开了，暂停任务
                         self.task_manager.pause_work()
                     else:
@@ -432,6 +450,8 @@ class SeatGuardApp:
                         result = sm.transition_to(self.State.CHECK, current_time, "2分钟倒计时结束")
                         if result:
                             self.log(f"状态转换: {result[0]} → {result[1]} ({result[2]})")
+                            self.notifier.notify("状态切换", "休息时间到！请回到座位继续工作！")
+                            self._update_tray_icon(True)
                         sm.on_enter_check(current_time)
                     else:
                         self.log(f"休息中，剩余 {int(remaining)}秒")
@@ -446,6 +466,8 @@ class SeatGuardApp:
                         result = sm.transition_to(self.State.AWAY, current_time, "3分钟无人")
                         if result:
                             self.log(f"状态转换: {result[0]} → {result[1]} ({result[2]})")
+                            self.notifier.notify("状态切换", "您已离开座位，进入离开模式")
+                            self._update_tray_icon(True)
                     else:
                         self.log(f"检测用户中，剩余 {int(remaining)}秒")
 
@@ -477,6 +499,8 @@ class SeatGuardApp:
                 result = sm.transition_to(self.State.AWAY, current_time, "5分钟无人")
                 if result:
                     self.log(f"状态转换: {result[0]} → {result[1]} ({result[2]})")
+                    self.notifier.notify("状态切换", "您已离开座位 5 分钟，进入离开模式")
+                    self._update_tray_icon(True)
             else:
                 if sm.user_present_in_work:
                     remaining = self.timer.format_time(self.timer.get_remaining_seconds())
@@ -494,6 +518,8 @@ class SeatGuardApp:
                 result = sm.transition_to(self.State.CHECK, current_time, "2分钟倒计时结束")
                 if result:
                     self.log(f"状态转换: {result[0]} → {result[1]} ({result[2]})")
+                    self.notifier.notify("状态切换", "休息时间到！请回到座位继续工作！")
+                    self._update_tray_icon(True)
                 sm.on_enter_check(current_time)
             else:
                 self.log(f"休息中(摄像头不可用)，剩余 {int(remaining)}秒")
@@ -508,6 +534,8 @@ class SeatGuardApp:
                 result = sm.transition_to(self.State.AWAY, current_time, "3分钟无人")
                 if result:
                     self.log(f"状态转换: {result[0]} → {result[1]} ({result[2]})")
+                    self.notifier.notify("状态切换", "您已离开座位，进入离开模式")
+                    self._update_tray_icon(True)
             else:
                 self.log(f"检测用户中(摄像头不可用)，剩余 {int(remaining)}秒")
 
@@ -548,9 +576,9 @@ class SeatGuardApp:
 
             self.log("开始创建系统托盘...")
 
-            # 创建图标 - 使用 TrayIconFactory
+            # 创建图标 - 使用 TrayIconFactory（未运行状态）
             self.log("正在创建托盘图标...")
-            icon_image = self._create_tray_icon(False)
+            icon_image = TrayIconFactory.create_state_icon(None, False, self.log)
             if icon_image is None:
                 self.log("图标创建失败，使用默认图标")
                 icon_image = TrayIconFactory.create_default_icon()
@@ -573,7 +601,7 @@ class SeatGuardApp:
                     checked=lambda item: self.config.screenshot_enabled
                 ),
                 pystray.Menu.SEPARATOR,
-                pystray.MenuItem("查看状态", self._show_status),
+                pystray.MenuItem(lambda item: self._get_status_text(), self._show_status),
                 pystray.Menu.SEPARATOR,
                 # Web 界面菜单
                 pystray.MenuItem("🌐 打开控制面板", self._trigger_open_main),
@@ -665,6 +693,31 @@ class SeatGuardApp:
     def _trigger_open_main(self, icon=None, item=None):
         """打开主页"""
         self.api_server.open_browser("/")
+
+    def _get_status_text(self):
+        """获取当前状态文本（用于托盘菜单显示）"""
+        if not self.is_monitoring:
+            return "不在监测"
+        sm = self.state_machine
+        state = sm.state
+        current_time = time.time()
+
+        if state == self.State.AWAY:
+            return "离开模式"
+        elif state == self.State.CHECK:
+            elapsed = current_time - sm.check_user_start_time
+            remaining = (3 * 60) - elapsed
+            return f"等待模式 ({int(remaining)}秒)"
+        elif state == self.State.RELAX:
+            elapsed = current_time - sm.rest_start_time
+            remaining = self.config.rest_countdown - elapsed
+            if remaining < 0:
+                remaining = 0
+            return f"休息模式 ({int(remaining)}秒)"
+        elif state == self.State.WORK:
+            return "工作模式"
+        else:
+            return "未知状态"
 
     def _show_status(self, icon=None, item=None):
         """显示状态"""

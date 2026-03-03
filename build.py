@@ -26,7 +26,10 @@ EXE_NAME = f"{APP_NAME}.exe"
 MAIN_SCRIPT = "main.py"
 
 # 图标路径
-ICON_PATH = os.path.join(PROJECT_ROOT, "icon.ico")
+ICON_PATH = os.path.join(PROJECT_ROOT, "icons", "not_moniter-001.ico")
+
+# icons 目录
+ICONS_DIR = os.path.join(PROJECT_ROOT, "icons")
 
 # OpenCV 级联分类器文件
 HAARCASCADE_FILE = "haarcascade_frontalface_default.xml"
@@ -70,7 +73,7 @@ def build_exe():
         "--icon", ICON_PATH if os.path.exists(ICON_PATH) else None,
         "--add-data", f"resources{os.pathsep}resources",  # 添加资源文件夹
         "--add-data", f"{HAARCASCADE_PATH}{os.pathsep}.",  # 添加级联分类器
-        "--add-data", f"{ICON_PATH}{os.pathsep}.",  # 添加图标文件
+        "--add-data", f"{ICONS_DIR}{os.pathsep}icons",  # 添加 icons 目录
         "--add-data", f"web{os.pathsep}web",  # 添加 Web 前端目录
         "--hidden-import", "cv2",
         "--hidden-import", "numpy",

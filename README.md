@@ -1,4 +1,4 @@
-# SeatGuard - 智能久坐提醒系统
+# SeatGuard -- 久坐提醒托盘软件
 
 <div align="center">
 

@@ -45,12 +45,11 @@ from detector import FaceDetector, Camera
 from timer import SeatTimer
 from notifier import Notifier
 from autostart import AutoStartManager
-from task_manager import TaskManager
 from report_generator import ReportGenerator
 from state_machine import SeatGuardStateMachine
 from screenshot import ScreenshotCapture
 from tray_icon import TrayIconFactory
-from task_gui import TaskBoardGUI
+# 任务管理已迁移到 Web 界面
 from api_server import APIServer
 
 
@@ -75,18 +74,11 @@ class SeatGuardApp:
         # 自启管理器
         self.autostart = AutoStartManager()
 
-        # 任务管理器
-        self.task_manager = TaskManager(self.log)
-
         # 报告生成器
         self.report_generator = ReportGenerator(self.log)
 
-        # 任务 GUI 管理器 (保留用于快速添加任务通知)
-        self.task_gui = TaskBoardGUI(self.task_manager, self.notifier)
-
         # API 服务器 (Web UI)
         self.api_server = APIServer(
-            self.task_manager,
             self.report_generator,
             self.config,
             host="127.0.0.1",
@@ -261,7 +253,7 @@ class SeatGuardApp:
                             # 重置计数器，每隔一段时间尝试重新打开
                             if retry_count >= max_retries:
                                 # 减少日志输出
-                            pass
+                                pass
                     else:
                         # 摄像头不可用时，视为未检测到人像
                         self._do_detection_no_camera()
@@ -344,8 +336,6 @@ class SeatGuardApp:
                     sm.on_enter_work(current_time, self.timer)
                     # 直接截图：进入工作模式（当前帧已有人脸）
                     self._capture_screenshot(frame, "work_start")
-                    # 联动任务管理器：恢复当前任务计时
-                    self.task_manager.resume_work()
 
                 elif state == self.State.WORK:
                     # WORK: 检测到人脸
@@ -356,19 +346,6 @@ class SeatGuardApp:
                         self.log("检测到落座，开始工作计时")
                         # 直接截图：进入工作模式（当前帧已有人脸）
                         self._capture_screenshot(frame, "work_start")
-                        # 联动任务管理器：恢复当前任务计时
-                        self.task_manager.resume_work()
-
-                    # 联动任务管理器：检查当前专注块是否已达标 (25分钟)
-                    completed_task_name = self.task_manager.check_and_update_timer()
-                    if completed_task_name:
-                        self.notifier.notify(
-                            title="专注块完成",
-                            message=f"太棒了！你已为「{completed_task_name}」专注了 25 分钟。"
-                        )
-                        # 如果 GUI 管理面板正打开着，刷新它
-                        if hasattr(self, 'task_gui') and self.task_gui:
-                            self.task_gui.refresh_board()
 
                     if self.timer.is_time_up():
                         # 久坐超时，提醒后进入休息模式
@@ -384,8 +361,6 @@ class SeatGuardApp:
                                 self.notifier.notify("状态切换", "久坐超时！请休息一下吧！")
                                 self._update_tray_icon(True)
                             sm.on_enter_relax(current_time)
-                            # 联动任务管理器：被迫去休息了，任务暂停
-                            self.task_manager.pause_work()
                     else:
                         # 减少日志输出，不每20秒打印
                         pass
@@ -418,8 +393,6 @@ class SeatGuardApp:
                     sm.on_enter_work(current_time, self.timer)
                     # 直接截图：进入工作模式（当前帧已有人脸）
                     self._capture_screenshot(frame, "work_start")
-                    # 联动任务管理器：结束检查，重新投入工作
-                    self.task_manager.resume_work()
 
             # --- 未检测到人脸 ---
             else:
@@ -439,8 +412,6 @@ class SeatGuardApp:
                             # 静默进入 AWAY 模式，不发通知
                             pass
                             self._update_tray_icon(True)
-                        # 联动任务管理器：人离开了，暂停任务
-                        self.task_manager.pause_work()
                     else:
                         # 减少日志输出，暂时离开时只在状态变化时输出
                         pass
@@ -620,7 +591,6 @@ class SeatGuardApp:
                 pystray.Menu.SEPARATOR,
                 # Web 界面菜单
                 pystray.MenuItem("🌐 打开控制面板", self._trigger_open_main),
-                pystray.MenuItem("📋 任务板", self._trigger_open_task_board),
                 pystray.MenuItem("⚙️ 设置", self._trigger_open_settings),
                 pystray.MenuItem("📝 日志", self._trigger_open_logs),
                 pystray.Menu.SEPARATOR,
@@ -684,14 +654,6 @@ class SeatGuardApp:
         else:
             self.log("已关闭截图功能")
             self.notifier.notify("设置已更改", "截图功能已关闭。")
-
-    def _trigger_quick_add_task(self, icon=None, item=None):
-        """快速添加任务 - 打开任务板页面"""
-        self.api_server.open_browser("/tasks")
-
-    def _trigger_open_task_board(self, icon=None, item=None):
-        """打开任务管理面板 - 打开网页"""
-        self.api_server.open_browser("/tasks")
 
     def _trigger_open_settings(self, icon=None, item=None):
         """打开设置页面"""
@@ -764,26 +726,6 @@ class SeatGuardApp:
                 status = "未知状态"
 
         self.notifier.notify("SeatGuard 状态", status)
-
-    def _show_task_board(self, icon=None, item=None):
-        """显示任务板"""
-        tasks = self.task_manager.get_today_tasks()
-        summary = self.task_manager.get_today_summary()
-
-        if not tasks:
-            message = "今日暂无任务\n\n点击添加任务"
-            self.notifier.notify("📋 任务板", message)
-            return
-
-        lines = [f"今日任务 ({summary['completed_blocks']}/{summary['total_blocks']}块)"]
-        for i, task in enumerate(tasks, 1):
-            status_mark = "✅" if task["status"] == "已完成" else ("🔄" if task["status"] == "进行中" else "⏳")
-            completed = task.get("completed_blocks", 0)
-            total = task["estimated_blocks"]
-            lines.append(f"{i}. {status_mark} {task['name']} ({completed}/{total}块)")
-
-        message = "\n".join(lines[:8])  # 限制显示行数
-        self.notifier.notify("📋 任务板", message)
 
     def _show_daily_report(self, icon=None, item=None):
         """显示今日日报"""

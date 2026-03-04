@@ -1,5 +1,6 @@
 """
 数据存储模块 - 负责任务和报告数据的持久化
+纯久坐提醒应用，无需任务管理
 """
 import json
 import os
@@ -10,8 +11,7 @@ class DataStore:
     """数据存储器 - 使用JSON文件"""
 
     DEFAULT_DATA = {
-        "task_templates": [],
-        "daily_plans": {},
+        "daily_plans": {},           # 每日计划（用于健康统计）
         "history": {
             "weekly_reports": {},
             "daily_reports": {}
@@ -32,10 +32,8 @@ class DataStore:
                     self.data = json.load(f)
             except (json.JSONDecodeError, IOError):
                 self.data = self.DEFAULT_DATA.copy()
-                self._init_default_templates()
         else:
             self.data = self.DEFAULT_DATA.copy()
-            self._init_default_templates()
 
     def save(self):
         """保存数据"""
@@ -45,31 +43,8 @@ class DataStore:
         except IOError:
             pass
 
-    def _init_default_templates(self):
-        """初始化默认任务模板"""
-        self.data["task_templates"] = [
-            {"name": "写周报", "default_blocks": 4, "category": "工作"},
-            {"name": "写日报", "default_blocks": 1, "category": "工作"},
-            {"name": "学习新技术", "default_blocks": 2, "category": "学习"},
-            {"name": "团队会议", "default_blocks": 1, "category": "会议"},
-            {"name": "整理代码库", "default_blocks": 2, "category": "工作"}
-        ]
-        self.save()
+    # ===== 每日计划 (用于健康统计) =====
 
-    # ===== 任务模板管理 =====
-    def get_task_templates(self):
-        return self.data.get("task_templates", [])
-
-    def add_task_template(self, template):
-        self.data["task_templates"].append(template)
-        self.save()
-
-    def remove_task_template(self, name):
-        templates = self.data.get("task_templates", [])
-        self.data["task_templates"] = [t for t in templates if t["name"] != name]
-        self.save()
-
-    # ===== 每日任务管理 =====
     def get_today_plan(self):
         today = date.today().isoformat()
         return self.data.get("daily_plans", {}).get(today, {"tasks": {}, "task_order": []})
@@ -81,18 +56,8 @@ class DataStore:
         self.data["daily_plans"][today] = plan
         self.save()
 
-    def get_task(self, task_id):
-        today = self.get_today_plan()
-        return today.get("tasks", {}).get(task_id)
-
-    def update_task(self, task_id, task_data):
-        today = self.get_today_plan()
-        if "tasks" not in today:
-            today["tasks"] = {}
-        today["tasks"][task_id] = task_data
-        self.save_today_plan(today)
-
     # ===== 健康统计 =====
+
     def get_health_stats(self):
         today = self.get_today_plan()
         return today.get("health_stats", {"breaks": 0, "leaves": 0, "leave_minutes": 0, "max_focus_minutes": 0})
@@ -120,6 +85,7 @@ class DataStore:
         self.save_today_plan(today)
 
     # ===== 日报周报 =====
+
     def get_daily_report(self, date_str):
         history = self.data.get("history", {})
         return history.get("daily_reports", {}).get(date_str)

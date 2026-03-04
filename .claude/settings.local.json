@@ -26,7 +26,10 @@
       "Bash(pkill -f \"python main.py\")",
       "Bash(curl -s http://127.0.0.1:8765/api/reports/daily)",
       "Bash(python -m json.tool)",
-      "Bash(ls -la h:/longset/seat_guard_pure/*.py)"
+      "Bash(ls -la h:/longset/seat_guard_pure/*.py)",
+      "WebFetch(domain:to-do.office.com)",
+      "Bash(python -m py_compile main.py task_manager.py data_store.py api_server.py)",
+      "Bash(python -m py_compile main.py api_server.py data_store.py)"
     ]
   }
 }

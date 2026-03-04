@@ -73,7 +73,7 @@ class TrayIconFactory:
             'away': 'icon_away-001.ico',
         }
 
-        icon_filename = icon_mapping.get(state, 'icon_work-001.ico')
+        icon_filename = icon_mapping.get(str(state), 'icon_work-001.ico')
         icon_path = os.path.join(icons_dir, icon_filename)
 
         # 检查图标是否存在

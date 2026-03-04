@@ -186,9 +186,10 @@ class SeatGuardApp:
             try:
                 # 获取当前状态
                 state = None
-                if is_running and hasattr(self, 'state_machine'):
+                if is_running and hasattr(self, 'state_machine') and self.state_machine:
                     state = self.state_machine.state
 
+                self.log(f"更新托盘图标: is_running={is_running}, state={state}")
                 new_icon = TrayIconFactory.create_state_icon(state, is_running, self.log)
                 if new_icon:
                     self.tray.icon = new_icon

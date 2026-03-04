@@ -29,7 +29,8 @@
       "Bash(ls -la h:/longset/seat_guard_pure/*.py)",
       "WebFetch(domain:to-do.office.com)",
       "Bash(python -m py_compile main.py task_manager.py data_store.py api_server.py)",
-      "Bash(python -m py_compile main.py api_server.py data_store.py)"
+      "Bash(python -m py_compile main.py api_server.py data_store.py)",
+      "Bash(python -m py_compile main.py tray_icon.py)"
     ]
   }
 }
